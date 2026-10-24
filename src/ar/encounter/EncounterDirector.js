@@ -6,6 +6,7 @@
  */
 
 import { awardEvidence, recordEncounterLog } from '../../services/investigationStorage';
+import { soundEffects } from '../../services/soundEffects';
 
 export const EncounterState = Object.freeze({
   DORMANT: 'DORMANT',
@@ -142,6 +143,10 @@ export class EncounterDirector {
       this.activeEntity.setEncounterState(nextState);
     }
 
+    if (nextState === EncounterState.DISTURBED) {
+      soundEffects.playVisualDistortionCue();
+    }
+
     if (this.onStateChange) {
       this.onStateChange(nextState, prev, context);
     }
@@ -170,6 +175,9 @@ export class EncounterDirector {
     this.scanProgress = 0;
 
     this.transitionTo(EncounterState.APPEARING, { entity, entityDef });
+
+    // Phase 7: Activate creature-specific ambient presence drone
+    soundEffects.startCreaturePresence(entityDef?.id);
 
     // Transition from APPEARING to OBSERVING after manifestation window (~1.2s)
     this.appearanceTimer = setTimeout(() => {
@@ -246,13 +254,19 @@ export class EncounterDirector {
         return;
       }
 
+      const prevFloor = Math.floor(this.scanProgress);
       this.scanProgress = Math.min(100, this.scanProgress + progressPerStep);
+      const newFloor = Math.floor(this.scanProgress);
+
+      if (Math.floor(newFloor / 18) > Math.floor(prevFloor / 18)) {
+        soundEffects.playScanProgressTick(newFloor);
+      }
 
       if (onProgress) {
-        onProgress(Math.floor(this.scanProgress));
+        onProgress(newFloor);
       }
       if (this.onScanProgress) {
-        this.onScanProgress(Math.floor(this.scanProgress));
+        this.onScanProgress(newFloor);
       }
 
       if (this.scanProgress >= 100) {
@@ -278,6 +292,7 @@ export class EncounterDirector {
    * Internal failure handling with deterministic outcome
    */
   failScan(outcome, reasonText, onFail = null) {
+    soundEffects.playScanFailure();
     if (this.scanTimer) {
       clearInterval(this.scanTimer);
       this.scanTimer = null;
@@ -390,6 +405,7 @@ export class EncounterDirector {
   }
 
   _finishDispersal(onComplete = null) {
+    soundEffects.stopCreaturePresence();
     if (this.activeEntity && typeof this.activeEntity.dispose === 'function') {
       this.activeEntity.dispose();
     }

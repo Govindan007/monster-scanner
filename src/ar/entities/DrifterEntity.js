@@ -280,6 +280,9 @@ export class DrifterEntity {
               shard.holder.position.x = shard.basePos.x;
               shard.holder.position.z = shard.basePos.z;
               shard.holder.position.y = shard.basePos.y + wave;
+              // Phase 7: Independent axial shard tumble
+              shard.holder.rotation.y = elapsedTime * (0.8 + i * 0.25);
+              shard.holder.rotation.x = Math.sin(elapsedTime * 1.5 + i) * 0.18;
             }
             this.coreLight.intensity = 2.2 + Math.sin(elapsedTime * 3.2) * 0.5;
           }

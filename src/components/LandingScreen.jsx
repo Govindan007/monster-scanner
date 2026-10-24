@@ -7,6 +7,7 @@ export default function LandingScreen({
   onOpenJournal,
   unreviewedEvidenceCount = 0,
   onOpenRadar,
+  onOpenSettings,
 }) {
 
   const handleStart = (useSimulated = false) => {
@@ -125,6 +126,20 @@ export default function LandingScreen({
               }}
             >
               <span>📡 OPTICAL ANOMALY RADAR MATRIX</span>
+            </button>
+          )}
+
+          {onOpenSettings && (
+            <button
+              type="button"
+              id="landing-settings-btn"
+              className="landing-settings-button"
+              onClick={() => {
+                soundEffects.playButtonBeep(540, 0.05);
+                onOpenSettings();
+              }}
+            >
+              <span>⚙ AUDIO &amp; IMMERSION CONTROLS</span>
             </button>
           )}
 

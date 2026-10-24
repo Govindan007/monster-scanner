@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { soundEffects } from '../services/soundEffects';
 import HumanoidEntity from './HumanoidEntity';
 import EntitySelector from './EntitySelector';
+import HorrorAtmosphereOverlay from './HorrorAtmosphereOverlay';
 import { getEntityById, getDefaultEntity } from '../ar/entities/EntityRegistry';
 
 export default function ScannerOverlay({
@@ -27,6 +28,7 @@ export default function ScannerOverlay({
   onOpenJournal,
   unreviewedEvidenceCount = 0,
   onOpenRadar,
+  onOpenSettings,
 }) {
   const [isMuted, setIsMuted] = useState(soundEffects.isMuted());
   const [timecode, setTimecode] = useState('00:00:00:00');
@@ -104,6 +106,13 @@ export default function ScannerOverlay({
         </div>
       )}
 
+      {/* Phase 7: Horror Atmosphere & Suspense Overlay */}
+      <HorrorAtmosphereOverlay
+        encounterState={activeAnomaly ? 'DISTURBED' : 'DORMANT'}
+        isScanning={glitchActive || scanStatus.includes('DETECTED')}
+        activeEntityId={selectedEntityId}
+      />
+
       {/* TOP HEADER BAR */}
       <header className="scanner-header">
         <div className="header-left">
@@ -170,6 +179,17 @@ export default function ScannerOverlay({
           >
             {isSimulated ? 'CAM' : 'SIM'}
           </button>
+
+          {/* Immersion & Audio Settings toggle */}
+          {onOpenSettings && (
+            <button
+              className="hud-icon-button"
+              onClick={onOpenSettings}
+              title="Immersion, Audio & Horror Settings"
+            >
+              ⚙
+            </button>
+          )}
 
           {/* Sound toggle */}
           <button

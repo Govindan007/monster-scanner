@@ -329,8 +329,11 @@ export class CrawlerEntity {
           } else {
             for (let i = 0; i < this.legs.length; i++) {
               const leg = this.legs[i];
-              const twitch = Math.sin(elapsedTime * 3.5 + leg.index) * 0.03;
-              leg.upper.rotation.z = leg.baseAngleZ + twitch;
+              // Phase 7: Alternating tripod floor-feeling kinematics
+              const tripodPhase = (i % 2 === 0 ? 0 : Math.PI);
+              const legCycle = Math.sin(elapsedTime * 2.2 + tripodPhase) * 0.035;
+              leg.upper.rotation.z = leg.baseAngleZ + legCycle;
+              leg.upper.rotation.x = Math.sin(elapsedTime * 1.8 + i) * 0.02;
             }
             this.eyeLight.intensity = 2.0 + Math.sin(elapsedTime * 4.0) * 0.5;
           }

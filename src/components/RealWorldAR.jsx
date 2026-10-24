@@ -7,6 +7,8 @@ import { getUnreviewedEvidenceCount } from '../services/investigationStorage';
 import EntitySelector from './EntitySelector';
 import InvestigationJournal from './InvestigationJournal';
 import AnomalyRadarModal from './AnomalyRadarModal';
+import HorrorAtmosphereOverlay from './HorrorAtmosphereOverlay';
+import HorrorSettingsModal from './HorrorSettingsModal';
 
 export default function RealWorldAR({
   onExitAR,
@@ -23,6 +25,7 @@ export default function RealWorldAR({
   const [showSelector, setShowSelector] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
   const [showRadar, setShowRadar] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [unreviewedCount, setUnreviewedCount] = useState(() => getUnreviewedEvidenceCount());
 
   // Surface & Placement state
@@ -341,6 +344,19 @@ export default function RealWorldAR({
               <span>📡 RADAR</span>
             </button>
 
+            {/* Immersion & Audio Settings Button */}
+            <button
+              id="ar-settings-btn"
+              className="ar-journal-trigger-btn"
+              onClick={() => {
+                soundEffects.playButtonBeep(520, 0.05);
+                setShowSettings(true);
+              }}
+              title="Immersion, Audio & Horror Settings"
+            >
+              <span>⚙</span>
+            </button>
+
             <button
               className={`ar-diag-toggle-btn ${showDiagnostics ? 'active' : ''}`}
               onClick={() => setShowDiagnostics((prev) => !prev)}
@@ -607,6 +623,19 @@ export default function RealWorldAR({
           isOpen={showRadar}
           onClose={() => setShowRadar(false)}
           onEngageAnomaly={handleEngageFromRadar}
+        />
+
+        {/* Phase 7: Horror Atmosphere & Suspense Overlay in AR */}
+        <HorrorAtmosphereOverlay
+          encounterState={encounterState}
+          isScanning={isScanning}
+          activeEntityId={selectedEntity.id}
+        />
+
+        {/* Phase 7: Immersion & Audio Settings Modal */}
+        <HorrorSettingsModal
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
         />
       </div>
     </div>

@@ -5,6 +5,7 @@ import ScannerOverlay from './components/ScannerOverlay';
 import RealWorldAR from './components/RealWorldAR';
 import InvestigationJournal from './components/InvestigationJournal';
 import AnomalyRadarModal from './components/AnomalyRadarModal';
+import HorrorSettingsModal from './components/HorrorSettingsModal';
 import { soundEffects } from './services/soundEffects';
 import { checkWebXRSupport } from './services/deviceDiagnostics';
 import { getUnreviewedEvidenceCount } from './services/investigationStorage';
@@ -20,9 +21,10 @@ export default function App() {
   const [arSupported, setArSupported] = useState(null);
   const [arUnsupportedNotice, setArUnsupportedNotice] = useState(null);
 
-  // Investigation Journal & Radar state
+  // Modals state: Journal, Radar, Settings
   const [showJournal, setShowJournal] = useState(false);
   const [showRadar, setShowRadar] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [unreviewedEvidenceCount, setUnreviewedEvidenceCount] = useState(() => getUnreviewedEvidenceCount());
 
   // Scanner state
@@ -235,6 +237,7 @@ export default function App() {
           onOpenJournal={() => setShowJournal(true)}
           unreviewedEvidenceCount={unreviewedEvidenceCount}
           onOpenRadar={() => setShowRadar(true)}
+          onOpenSettings={() => setShowSettings(true)}
         />
       ) : isARActive ? (
         /* Real-World Tracked WebXR AR Mode */
@@ -278,6 +281,7 @@ export default function App() {
             onOpenJournal={() => setShowJournal(true)}
             unreviewedEvidenceCount={unreviewedEvidenceCount}
             onOpenRadar={() => setShowRadar(true)}
+            onOpenSettings={() => setShowSettings(true)}
           />
         </div>
       )}
@@ -296,6 +300,12 @@ export default function App() {
         isOpen={showRadar}
         onClose={() => setShowRadar(false)}
         onEngageAnomaly={handleEngageAnomaly}
+      />
+
+      {/* Immersion & Audio Settings Modal at App root for 2D scanner & landing */}
+      <HorrorSettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
       />
     </div>
   );

@@ -343,6 +343,16 @@ export class WatcherEntity {
 
           this.headGroup.rotation.y = this._currentHeadYaw;
           this.upperBodyGroup.rotation.y = this._currentHeadYaw * 0.35;
+
+          // Phase 7: Close proximity gaze fixation & unsettling micro-tilt
+          const distToPlayer = this._localCamPos.length();
+          if (distToPlayer < 1.7) {
+            const gazeTilt = Math.sin(elapsedTime * 1.4) * 0.045;
+            this.headGroup.rotation.z = gazeTilt;
+            this.eyeLight.intensity += Math.sin(elapsedTime * 9.0) * 0.3;
+          } else {
+            this.headGroup.rotation.z = THREE.MathUtils.lerp(this.headGroup.rotation.z, 0, 0.05);
+          }
         }
         break;
 
