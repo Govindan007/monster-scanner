@@ -1,11 +1,18 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { ARManager } from '../ar/ARManager';
 import { soundEffects } from '../services/soundEffects';
+import { getEntityById, getDefaultEntity } from '../ar/entities/EntityRegistry';
+import { recordEntityDiscovery } from '../services/discoveryStorage';
+import EntitySelector from './EntitySelector';
 
-export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecorded }) {
+export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecorded, initialEntityId = 'the-watcher' }) {
   const containerRef = useRef(null);
   const overlayRef = useRef(null);
   const arManagerRef = useRef(null);
+
+  // Active Entity Selection & Modal
+  const [selectedEntity, setSelectedEntity] = useState(() => getEntityById(initialEntityId) || getDefaultEntity());
+  const [showSelector, setShowSelector] = useState(false);
 
   const [surfaceDetected, setSurfaceDetected] = useState(false);
   const [placedCount, setPlacedCount] = useState(0);
@@ -22,6 +29,7 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
     surfaceDetected: false,
     hitCount: 0,
     sceneEntityCount: 0,
+    selectedEntity: selectedEntity.name,
     lastPose: null,
     lastError: null,
   });
@@ -46,16 +54,27 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
     onEncounterRecordedRef.current = onEncounterRecorded;
   });
 
+  // Handle entity selection change
+  const handleSelectEntity = useCallback((entity) => {
+    setSelectedEntity(entity);
+    setShowSelector(false);
+    if (arManagerRef.current) {
+      arManagerRef.current.setSelectedEntity(entity);
+    }
+    setConfirmationNotice(`TARGET LOCKED: ${entity.name} (${entity.code})`);
+    setTimeout(() => setConfirmationNotice(null), 2500);
+  }, []);
+
   // Handle explicit placement button or XR tap
   const handlePlaceEntity = useCallback(() => {
     if (!arManagerRef.current || isScanning) return;
 
     soundEffects.playAnomalySpawn();
-    const result = arManagerRef.current.placeEntityAtCurrentReticle();
+    const result = arManagerRef.current.placeEntityAtCurrentReticle(selectedEntity);
 
     if (result && result.success) {
       if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
-      setConfirmationNotice('THE WATCHER MANIFESTED // POSITION LOCKED IN REAL SPACE');
+      setConfirmationNotice(`${selectedEntity.name} MANIFESTED // POSITION LOCKED IN REAL SPACE`);
       noticeTimerRef.current = setTimeout(() => {
         setConfirmationNotice(null);
       }, 3500);
@@ -67,7 +86,7 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
         setConfirmationNotice(null);
       }, 3500);
     }
-  }, [isScanning]);
+  }, [isScanning, selectedEntity]);
 
   // Handle scanning interaction
   const handleStartScan = useCallback(() => {
@@ -80,7 +99,7 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
 
     let currentProgress = 0;
     const interval = 80;
-    const totalDuration = 1800; // 1.8 seconds scan
+    const totalDuration = selectedEntity.scanDuration || 1800;
     const step = (interval / totalDuration) * 100;
 
     scanTimerRef.current = setInterval(() => {
@@ -90,9 +109,18 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
         scanTimerRef.current = null;
         setScanProgress(100);
 
-        // Scan completes: trigger DISTURBED state on Watcher!
+        // Scan completes: trigger DISTURBED state on placed entity!
         const result = arManagerRef.current.scanPlacedEntities();
         soundEffects.playAnomalySpawn();
+
+        // Persist discovery record
+        if (result && result.id) {
+          recordEntityDiscovery(result.id, {
+            name: result.name,
+            code: result.code,
+            threat: result.threat,
+          });
+        }
 
         // Brief visual screen glitch
         setScanGlitch(true);
@@ -103,7 +131,7 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
 
         // Record ONE successful encounter
         if (onEncounterRecordedRef.current) {
-          onEncounterRecordedRef.current();
+          onEncounterRecordedRef.current(result);
         }
       } else {
         setScanProgress(Math.floor(currentProgress));
@@ -112,7 +140,7 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
         }
       }
     }, interval);
-  }, [isScanning, placedCount]);
+  }, [isScanning, placedCount, selectedEntity]);
 
   // Handle purging / dissolving the placed entity
   const handlePurgeEntity = useCallback(() => {
@@ -203,7 +231,20 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
             <span className="ar-pulse-dot"></span>
             <span>VEIL // REAL WORLD AR</span>
           </div>
+
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {/* Entity Selector Trigger Button */}
+            <button
+              id="ar-entity-select-btn"
+              className="ar-entity-select-trigger"
+              onClick={() => setShowSelector(true)}
+              title="Select Active Anomaly Entity"
+            >
+              <span className="ar-entity-select-icon">◈</span>
+              <span className="ar-entity-select-name">{selectedEntity.name}</span>
+              <span className="ar-entity-select-arrow">▾</span>
+            </button>
+
             <button
               className={`ar-diag-toggle-btn ${showDiagnostics ? 'active' : ''}`}
               onClick={() => setShowDiagnostics((prev) => !prev)}
@@ -259,8 +300,12 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
                 </span>
               </div>
               <div className="ar-diag-row">
-                <span className="ar-diag-label">ENTITY MODEL:</span>
-                <span className="diag-ok">THE WATCHER (3D PROCEDURAL)</span>
+                <span className="ar-diag-label">ACTIVE ENTITY:</span>
+                <span className="diag-ok">{selectedEntity.name} ({selectedEntity.classification})</span>
+              </div>
+              <div className="ar-diag-row">
+                <span className="ar-diag-label">MODEL TYPE:</span>
+                <span className="diag-ok">{selectedEntity.isProcedural ? '3D PROCEDURAL' : 'LOCAL GLTF/GLB'}</span>
               </div>
               <div className="ar-diag-row">
                 <span className="ar-diag-label">SCENE ENTITIES:</span>
@@ -344,11 +389,11 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
             <div className="ar-status-banner">
               {placedCount > 0 ? (
                 <span className="ar-locked-text">
-                  THE WATCHER ACTIVE // WALK AROUND ENTITY OR TRIGGER SCAN
+                  {selectedEntity.name} ACTIVE // WALK AROUND ENTITY OR TRIGGER SCAN
                 </span>
               ) : surfaceDetected ? (
                 <span className="ar-blink-text">
-                  SURFACE DETECTED // TAP SCREEN OR BUTTON TO PLACE THE WATCHER
+                  SURFACE DETECTED // TAP SCREEN OR BUTTON TO PLACE {selectedEntity.name.toUpperCase()}
                 </span>
               ) : (
                 <span>POINT CAMERA SLOWLY TOWARD FLOOR OR TABLE...</span>
@@ -369,11 +414,11 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
                   className={`ar-placement-btn ${surfaceDetected ? 'active' : 'disabled'}`}
                   onClick={handlePlaceEntity}
                   disabled={!surfaceDetected}
-                  title={surfaceDetected ? 'Anchor entity to detected surface' : 'Scan for floor/surface first'}
+                  title={surfaceDetected ? `Anchor ${selectedEntity.name} to detected surface` : 'Scan for floor/surface first'}
                 >
                   <span className="ar-btn-icon">⚡</span>
                   <span className="ar-btn-label">
-                    {surfaceDetected ? 'MANIFEST THE WATCHER' : 'SCANNING FOR SURFACE...'}
+                    {surfaceDetected ? `MANIFEST ${selectedEntity.name.toUpperCase()}` : 'SCANNING FOR SURFACE...'}
                   </span>
                 </button>
               ) : (
@@ -396,7 +441,7 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
                     className="action-btn recalibrate-btn ar-purge-btn"
                     onClick={handlePurgeEntity}
                     disabled={isScanning}
-                    title="Dissolve and conclude encounter with The Watcher"
+                    title={`Dissolve and conclude encounter with ${selectedEntity.name}`}
                   >
                     DISPERSE ENTITY
                   </button>
@@ -413,19 +458,27 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
                 </span>
               </div>
               <div className="ar-telemetry-row">
-                <span className="ar-dim">ENTITY STATUS:</span>
+                <span className="ar-dim">TARGET ENTITY:</span>
                 <span className="ar-highlight">
-                  {placedCount > 0 ? 'THE WATCHER (OBSERVING)' : 'SEARCHING FOR METAPHYSICAL RIFT'}
+                  {placedCount > 0 ? `${selectedEntity.name} (${selectedEntity.classification})` : `${selectedEntity.name} [ARMED FOR MANIFESTATION]`}
                 </span>
               </div>
               <div className="ar-instructions">
                 {placedCount > 0
-                  ? 'Walk around The Watcher in 3D room space. Press SCAN to analyze resonance.'
+                  ? `Walk around ${selectedEntity.name} in 3D room space. Press SCAN to analyze resonance.`
                   : 'Move phone across floor or table until the red reticle locks onto a plane.'}
               </div>
             </div>
           </footer>
         )}
+
+        {/* Manual Entity Selector Modal */}
+        <EntitySelector
+          isOpen={showSelector}
+          selectedEntityId={selectedEntity.id}
+          onSelectEntity={handleSelectEntity}
+          onClose={() => setShowSelector(false)}
+        />
       </div>
     </div>
   );

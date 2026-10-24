@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { soundEffects } from '../services/soundEffects';
 import HumanoidEntity from './HumanoidEntity';
+import EntitySelector from './EntitySelector';
+import { getEntityById, getDefaultEntity } from '../ar/entities/EntityRegistry';
 
 export default function ScannerOverlay({
   activeAnomaly,
@@ -8,6 +10,8 @@ export default function ScannerOverlay({
   anomalyCount,
   scanStatus,
   glitchActive,
+  selectedEntityId = 'the-watcher',
+  onSelectEntityId,
   onTriggerScan,
   onRecalibrate,
   onExit,
@@ -24,6 +28,9 @@ export default function ScannerOverlay({
   const [isMuted, setIsMuted] = useState(soundEffects.isMuted());
   const [timecode, setTimecode] = useState('00:00:00:00');
   const [fluctuatingFreq, setFluctuatingFreq] = useState(88.4);
+  const [showSelector, setShowSelector] = useState(false);
+
+  const currentEntity = getEntityById(selectedEntityId) || getDefaultEntity();
 
   // Timecode generator
   useEffect(() => {
@@ -107,6 +114,17 @@ export default function ScannerOverlay({
         </div>
 
         <div className="header-right">
+          {/* Entity Selector trigger */}
+          <button
+            className="hud-entity-select-btn"
+            onClick={() => setShowSelector(true)}
+            title="Configure Target Entity / Codex"
+          >
+            <span className="hud-entity-icon">◈</span>
+            <span className="hud-entity-name">{currentEntity.name}</span>
+            <span className="hud-entity-arrow">▾</span>
+          </button>
+
           {/* Diagnostics toggle */}
           <button
             className={`hud-icon-button ${showDiagnostics ? 'active-diag' : ''}`}
@@ -327,6 +345,17 @@ export default function ScannerOverlay({
           </div>
         </div>
       )}
+
+      {/* Manual Entity Selector Modal */}
+      <EntitySelector
+        isOpen={showSelector}
+        selectedEntityId={selectedEntityId}
+        onSelectEntity={(entity) => {
+          if (onSelectEntityId) onSelectEntityId(entity.id);
+          setShowSelector(false);
+        }}
+        onClose={() => setShowSelector(false)}
+      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WatcherEntity } from './entities/WatcherEntity';
+import { getDefaultEntity, getEntityById } from './entities/EntityRegistry';
 import { PlacementReticle } from './PlacementReticle';
 
 /**
@@ -35,6 +35,9 @@ export class ARManager {
     this.onSessionEnded = onSessionEnded;
     this.onDiagnostics = onDiagnostics;
 
+    // Active Entity Definition from Registry
+    this.selectedEntityDef = getDefaultEntity();
+
     // Instance lifecycle state
     this._disposed = false;
     this.isSessionActive = false;
@@ -59,6 +62,7 @@ export class ARManager {
       surfaceDetected: false,
       hitCount: 0,
       sceneEntityCount: 0,
+      selectedEntity: this.selectedEntityDef.name,
       lastPose: null,
       lastError: null,
     };
@@ -411,22 +415,39 @@ export class ARManager {
   }
 
   /**
+   * Sets the active entity definition from the registry for subsequent placement
+   */
+  setSelectedEntity(entityDefOrId) {
+    if (typeof entityDefOrId === 'string') {
+      this.selectedEntityDef = getEntityById(entityDefOrId);
+    } else if (entityDefOrId && entityDefOrId.createInstance) {
+      this.selectedEntityDef = entityDefOrId;
+    }
+    this.diagnostics.selectedEntity = this.selectedEntityDef.name;
+    this.emitDiagnostics();
+  }
+
+  /**
    * Explicitly places an entity at the reticle's current world-space pose
    */
-  placeEntityAtCurrentReticle() {
+  placeEntityAtCurrentReticle(overrideDef = null) {
     if (!this.reticle || !this.reticle.isVisible() || !this.latestHitPose.valid || !this.scene) {
       console.warn('ARManager: Surface not detected yet. Reticle is not locked onto a plane.');
       return { success: false, reason: 'NO_SURFACE_DETECTED' };
     }
 
-    // Instantiate THE WATCHER (production-quality 3D horror entity)
-    const entity = new WatcherEntity({
+    const entityDef = overrideDef || this.selectedEntityDef || getDefaultEntity();
+
+    // Instantiate selected entity using its registry factory
+    const entity = entityDef.createInstance({
       onStateChange: (newState, prevState) => {
         if (this.onEntityStateChange) {
           this.onEntityStateChange(newState, prevState, entity);
         }
       },
     });
+
+    entity._definition = entityDef;
 
     // Position in world space directly from reticle's verified physical surface pose
     entity.root.position.copy(this.latestHitPose.position);
@@ -455,10 +476,10 @@ export class ARManager {
     };
 
     if (this.onEntityPlaced) {
-      this.onEntityPlaced(this.placedEntities.length, pos, entity);
+      this.onEntityPlaced(this.placedEntities.length, pos, entity, entityDef);
     }
 
-    return { success: true, count: this.placedEntities.length, position: pos };
+    return { success: true, count: this.placedEntities.length, position: pos, entity, entityDef };
   }
 
   /**
@@ -468,11 +489,15 @@ export class ARManager {
     if (this.placedEntities.length === 0) return null;
     const target = this.placedEntities[this.placedEntities.length - 1];
     target.triggerDisturbed();
+    const def = target._definition || this.selectedEntityDef || getDefaultEntity();
     return {
-      name: target.name,
-      code: target.code,
-      threat: target.threat,
-      resonance: target.resonance,
+      id: def.id,
+      name: target.name || def.name,
+      code: target.code || def.code,
+      threat: target.threat || def.threat,
+      resonance: target.resonance || def.resonance,
+      behaviorSummary: def.behaviorSummary,
+      scanDuration: def.scanDuration,
     };
   }
 

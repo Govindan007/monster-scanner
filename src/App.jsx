@@ -23,6 +23,7 @@ export default function App() {
   const [scanStatus, setScanStatus] = useState('SEARCHING...');
   const [activeAnomaly, setActiveAnomaly] = useState(null);
   const [glitchActive, setGlitchActive] = useState(false);
+  const [selectedEntityId, setSelectedEntityId] = useState('the-watcher');
 
   // Refs for timer cleanup & concurrency guards
   const activeAnomalyRef = useRef(null);
@@ -215,6 +216,7 @@ export default function App() {
       ) : isARActive ? (
         /* Real-World Tracked WebXR AR Mode */
         <RealWorldAR
+          initialEntityId={selectedEntityId}
           onExitAR={handleExitAR}
           onEntityPlaced={handleEntityPlaced}
           onEncounterRecorded={handleEncounterRecorded}
@@ -236,6 +238,8 @@ export default function App() {
             anomalyCount={anomalyCount}
             scanStatus={scanStatus}
             glitchActive={glitchActive}
+            selectedEntityId={selectedEntityId}
+            onSelectEntityId={setSelectedEntityId}
             onTriggerScan={handleManualScan}
             onRecalibrate={handleRecalibrate}
             onExit={handleExit}
