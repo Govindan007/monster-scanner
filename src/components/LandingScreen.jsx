@@ -1,7 +1,7 @@
 import React from 'react';
 import { soundEffects } from '../services/soundEffects';
 
-export default function LandingScreen({ onStartScan, onStartSimulated }) {
+export default function LandingScreen({ onStartScan, onStartSimulated, onOpenJournal, unreviewedEvidenceCount = 0 }) {
 
   const handleStart = (useSimulated = false) => {
     // User interaction enables Web Audio
@@ -81,10 +81,8 @@ export default function LandingScreen({ onStartScan, onStartSimulated }) {
             id="start-scan-btn"
             className="start-scan-button"
             onMouseEnter={() => {
-              setHovered(true);
               soundEffects.playButtonBeep(440, 0.04);
             }}
-            onMouseLeave={() => setHovered(false)}
             onClick={() => handleStart(false)}
           >
             <span className="btn-bracket-l">&lt;</span>
@@ -92,6 +90,23 @@ export default function LandingScreen({ onStartScan, onStartSimulated }) {
             <span className="btn-bracket-r">&gt;</span>
             <div className="btn-scanner-light"></div>
           </button>
+
+          {onOpenJournal && (
+            <button
+              type="button"
+              id="landing-journal-btn"
+              className="landing-journal-button"
+              onClick={() => {
+                soundEffects.playButtonBeep(520, 0.05);
+                onOpenJournal();
+              }}
+            >
+              <span>📁 INVESTIGATION JOURNAL &amp; DOSSIERS</span>
+              {unreviewedEvidenceCount > 0 && (
+                <span className="journal-badge-pulse">{unreviewedEvidenceCount} NEW</span>
+              )}
+            </button>
+          )}
 
           <p className="permission-note">
             Camera permission required for live optical detection.

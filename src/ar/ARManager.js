@@ -33,6 +33,7 @@ export class ARManager {
     onScanOutcome,
     onEncounterResolved,
     onEncounterEscaped,
+    onEvidenceAwarded,
   }) {
     this.domOverlayRoot = domOverlayRoot;
     this.canvasContainer = canvasContainer;
@@ -47,11 +48,12 @@ export class ARManager {
     this.onScanOutcome = onScanOutcome;
     this.onEncounterResolved = onEncounterResolved;
     this.onEncounterEscaped = onEncounterEscaped;
+    this.onEvidenceAwarded = onEvidenceAwarded;
 
     // Active Entity Definition from Registry
     this.selectedEntityDef = getDefaultEntity();
 
-    // Encounter Director (Phase 4 State Machine)
+    // Encounter Director (Phase 4 & 5 State Machine & Evidence)
     this.encounterDirector = new EncounterDirector({
       onStateChange: (newState, prevState, context) => {
         this.diagnostics.encounterState = newState;
@@ -68,6 +70,9 @@ export class ARManager {
       },
       onEncounterResolved: (result) => {
         if (this.onEncounterResolved) this.onEncounterResolved(result);
+      },
+      onEvidenceAwarded: (evidence) => {
+        if (this.onEvidenceAwarded) this.onEvidenceAwarded(evidence);
       },
       onEncounterEscaped: () => {
         this.placedEntities = [];

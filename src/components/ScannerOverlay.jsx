@@ -24,6 +24,8 @@ export default function ScannerOverlay({
   arSupported,
   arUnsupportedNotice,
   setArUnsupportedNotice,
+  onOpenJournal,
+  unreviewedEvidenceCount = 0,
 }) {
   const [isMuted, setIsMuted] = useState(soundEffects.isMuted());
   const [timecode, setTimecode] = useState('00:00:00:00');
@@ -124,6 +126,20 @@ export default function ScannerOverlay({
             <span className="hud-entity-name">{currentEntity.name}</span>
             <span className="hud-entity-arrow">▾</span>
           </button>
+
+          {/* Investigation Journal */}
+          {onOpenJournal && (
+            <button
+              className="hud-icon-button hud-journal-btn"
+              onClick={onOpenJournal}
+              title="Open Paranormal Investigation Journal & Dossiers"
+            >
+              <span>📁</span>
+              {unreviewedEvidenceCount > 0 && (
+                <span className="hud-badge-counter">{unreviewedEvidenceCount}</span>
+              )}
+            </button>
+          )}
 
           {/* Diagnostics toggle */}
           <button

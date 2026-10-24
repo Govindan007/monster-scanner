@@ -5,6 +5,8 @@
  * deterministic scan outcomes, and clean resource lifecycle.
  */
 
+import { awardEvidence, recordEncounterLog } from '../../services/investigationStorage';
+
 export const EncounterState = Object.freeze({
   DORMANT: 'DORMANT',
   APPEARING: 'APPEARING',
@@ -29,6 +31,7 @@ export class EncounterDirector {
     onScanOutcome = null,
     onEncounterResolved = null,
     onEncounterEscaped = null,
+    onEvidenceAwarded = null,
   } = {}) {
     this.state = EncounterState.DORMANT;
     this.previousState = null;
@@ -40,10 +43,15 @@ export class EncounterDirector {
     this.onScanOutcome = onScanOutcome;
     this.onEncounterResolved = onEncounterResolved;
     this.onEncounterEscaped = onEncounterEscaped;
+    this.onEvidenceAwarded = onEvidenceAwarded;
 
     // Active encounter references
     this.activeEntity = null;
     this.activeEntityDef = null;
+    this.currentEncounterId = null;
+    this._evidenceAwardedThisEncounter = [];
+    this._encounterStartTime = 0;
+    this._hasDisturbedEvidenceAwarded = false;
 
     // Scan management
     this.isScanning = false;
@@ -153,6 +161,10 @@ export class EncounterDirector {
     this.clearAllTimers();
     this.activeEntity = entity;
     this.activeEntityDef = entityDef;
+    this.currentEncounterId = `enc_${entityDef?.id || 'entity'}_${Date.now()}`;
+    this._evidenceAwardedThisEncounter = [];
+    this._encounterStartTime = Date.now();
+    this._hasDisturbedEvidenceAwarded = false;
     this.scanDuration = entityDef?.scanDuration || 2000;
     this._isResultCommitted = false;
     this.scanProgress = 0;
@@ -176,6 +188,16 @@ export class EncounterDirector {
   triggerDisturbed(reason = 'USER_PROXIMITY') {
     if (this.state === EncounterState.OBSERVING) {
       this.transitionTo(EncounterState.DISTURBED, { reason });
+
+      // Award behavioural evidence on first disturbance
+      if (!this._hasDisturbedEvidenceAwarded && this.activeEntityDef) {
+        this._hasDisturbedEvidenceAwarded = true;
+        const ev = awardEvidence(this.activeEntityDef.id, this.currentEncounterId, 'DISTURBED');
+        if (ev) {
+          this._evidenceAwardedThisEncounter.push(ev);
+          if (this.onEvidenceAwarded) this.onEvidenceAwarded(ev);
+        }
+      }
 
       // Automatically calm down to OBSERVING after 3.8s if no scan occurs
       if (this.calmTimer) clearTimeout(this.calmTimer);
@@ -289,6 +311,15 @@ export class EncounterDirector {
     }
     this._isResultCommitted = true;
 
+    // Award evidence for resolving scan
+    if (this.activeEntityDef) {
+      const ev = awardEvidence(this.activeEntityDef.id, this.currentEncounterId, 'RESOLVED');
+      if (ev) {
+        this._evidenceAwardedThisEncounter.push(ev);
+        if (this.onEvidenceAwarded) this.onEvidenceAwarded(ev);
+      }
+    }
+
     this.transitionTo(EncounterState.RESOLVED);
 
     const result = {
@@ -301,6 +332,7 @@ export class EncounterDirector {
       resonance: this.activeEntityDef?.resonance || this.activeEntity?.resonance || '000.0 MHz',
       behaviorSummary: this.activeEntityDef?.behaviorSummary || 'ENTITY OBSERVED',
       timestamp: new Date().toISOString(),
+      evidenceAwarded: [...this._evidenceAwardedThisEncounter],
     };
 
     if (this.onScanOutcome) {
@@ -321,6 +353,26 @@ export class EncounterDirector {
     if (this.state === EncounterState.ESCAPING || this.state === EncounterState.DORMANT) {
       return;
     }
+
+    // Award dispersal/escape evidence if applicable
+    if (this.activeEntityDef && this._isResultCommitted) {
+      const ev = awardEvidence(this.activeEntityDef.id, this.currentEncounterId, 'ESCAPED');
+      if (ev) {
+        this._evidenceAwardedThisEncounter.push(ev);
+        if (this.onEvidenceAwarded) this.onEvidenceAwarded(ev);
+      }
+    }
+
+    // Record encounter log in journal timeline
+    const duration = (Date.now() - (this._encounterStartTime || Date.now())) / 1000;
+    recordEncounterLog({
+      encounterId: this.currentEncounterId,
+      entityId: this.activeEntityDef?.id || 'unknown',
+      entityName: this.activeEntityDef?.name || 'UNKNOWN ENTITY',
+      outcome: this._isResultCommitted ? 'RESOLVED' : (reason === 'USER_PURGE' ? 'DISPERSED' : 'SIGNAL_LOST'),
+      durationSeconds: duration,
+      evidenceAwarded: [...this._evidenceAwardedThisEncounter],
+    });
 
     this.clearAllTimers();
     this.isScanning = false;

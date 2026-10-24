@@ -3,7 +3,9 @@ import { ARManager, EncounterState } from '../ar/ARManager';
 import { soundEffects } from '../services/soundEffects';
 import { getEntityById, getDefaultEntity } from '../ar/entities/EntityRegistry';
 import { recordEntityDiscovery } from '../services/discoveryStorage';
+import { getUnreviewedEvidenceCount } from '../services/investigationStorage';
 import EntitySelector from './EntitySelector';
+import InvestigationJournal from './InvestigationJournal';
 
 export default function RealWorldAR({
   onExitAR,
@@ -18,6 +20,8 @@ export default function RealWorldAR({
   // Active Entity Selection & Modal
   const [selectedEntity, setSelectedEntity] = useState(() => getEntityById(initialEntityId) || getDefaultEntity());
   const [showSelector, setShowSelector] = useState(false);
+  const [showJournal, setShowJournal] = useState(false);
+  const [unreviewedCount, setUnreviewedCount] = useState(() => getUnreviewedEvidenceCount());
 
   // Surface & Placement state
   const [surfaceDetected, setSurfaceDetected] = useState(false);
@@ -232,6 +236,14 @@ export default function RealWorldAR({
           setEncounterState(EncounterState.DORMANT);
         }
       },
+      onEvidenceAwarded: (evidence) => {
+        if (isMounted) {
+          soundEffects.playAnomalyDetected();
+          setConfirmationNotice(`NEW EVIDENCE CATALOGED: ${evidence.title.toUpperCase()}`);
+          setUnreviewedCount(getUnreviewedEvidenceCount());
+          setTimeout(() => setConfirmationNotice(null), 3500);
+        }
+      },
     });
 
     arManagerRef.current = manager;
@@ -283,6 +295,22 @@ export default function RealWorldAR({
               <span className="ar-entity-select-icon">◈</span>
               <span className="ar-entity-select-name">{selectedEntity.name}</span>
               <span className="ar-entity-select-arrow">▾</span>
+            </button>
+
+            {/* Investigation Journal Button */}
+            <button
+              id="ar-journal-btn"
+              className="ar-journal-trigger-btn"
+              onClick={() => {
+                soundEffects.playButtonBeep(520, 0.05);
+                setShowJournal(true);
+              }}
+              title="Open Paranormal Investigation Journal & Dossiers"
+            >
+              <span>📁 JOURNAL</span>
+              {unreviewedCount > 0 && (
+                <span className="ar-journal-badge">{unreviewedCount}</span>
+              )}
             </button>
 
             <button
@@ -535,6 +563,15 @@ export default function RealWorldAR({
           selectedEntityId={selectedEntity.id}
           onSelectEntity={handleSelectEntity}
           onClose={() => setShowSelector(false)}
+        />
+
+        {/* Paranormal Investigation Journal & Dossiers Modal */}
+        <InvestigationJournal
+          isOpen={showJournal}
+          onClose={() => {
+            setShowJournal(false);
+            setUnreviewedCount(getUnreviewedEvidenceCount());
+          }}
         />
       </div>
     </div>

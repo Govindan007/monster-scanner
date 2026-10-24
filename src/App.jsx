@@ -3,8 +3,10 @@ import LandingScreen from './components/LandingScreen';
 import CameraFeed from './components/CameraFeed';
 import ScannerOverlay from './components/ScannerOverlay';
 import RealWorldAR from './components/RealWorldAR';
+import InvestigationJournal from './components/InvestigationJournal';
 import { soundEffects } from './services/soundEffects';
 import { checkWebXRSupport } from './services/deviceDiagnostics';
+import { getUnreviewedEvidenceCount } from './services/investigationStorage';
 
 export default function App() {
   const [isScanning, setIsScanning] = useState(false);
@@ -16,6 +18,10 @@ export default function App() {
   const [isARActive, setIsARActive] = useState(false);
   const [arSupported, setArSupported] = useState(null);
   const [arUnsupportedNotice, setArUnsupportedNotice] = useState(null);
+
+  // Investigation Journal state
+  const [showJournal, setShowJournal] = useState(false);
+  const [unreviewedEvidenceCount, setUnreviewedEvidenceCount] = useState(() => getUnreviewedEvidenceCount());
 
   // Scanner state
   const [realityIntegrity, setRealityIntegrity] = useState(100);
@@ -196,6 +202,7 @@ export default function App() {
     // Record exactly one successful encounter upon scanning
     setAnomalyCount((prev) => prev + 1);
     setRealityIntegrity((prev) => Math.max(0, prev - 5));
+    setUnreviewedEvidenceCount(getUnreviewedEvidenceCount());
   }, []);
 
   // Cleanup on unmount
@@ -212,6 +219,8 @@ export default function App() {
         <LandingScreen
           onStartScan={() => handleStartScan(false)}
           onStartSimulated={() => handleStartScan(true)}
+          onOpenJournal={() => setShowJournal(true)}
+          unreviewedEvidenceCount={unreviewedEvidenceCount}
         />
       ) : isARActive ? (
         /* Real-World Tracked WebXR AR Mode */
@@ -252,9 +261,20 @@ export default function App() {
             arSupported={arSupported}
             arUnsupportedNotice={arUnsupportedNotice}
             setArUnsupportedNotice={setArUnsupportedNotice}
+            onOpenJournal={() => setShowJournal(true)}
+            unreviewedEvidenceCount={unreviewedEvidenceCount}
           />
         </div>
       )}
+
+      {/* Investigation Journal Modal at App root for 2D scanner & landing */}
+      <InvestigationJournal
+        isOpen={showJournal}
+        onClose={() => {
+          setShowJournal(false);
+          setUnreviewedEvidenceCount(getUnreviewedEvidenceCount());
+        }}
+      />
     </div>
   );
 }
