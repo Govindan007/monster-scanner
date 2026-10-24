@@ -8,7 +8,7 @@ export default function CameraFeed({
   cameraError,
   setCameraError,
   showDiagnostics,
-  setShowDiagnostics,
+  setShowDiagnostics: _setShowDiagnostics,
 }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -171,9 +171,12 @@ export default function CameraFeed({
   }, [isSimulated, refreshPermissionState, setCameraError]);
 
   useEffect(() => {
-    startCamera();
+    const timer = setTimeout(() => {
+      startCamera();
+    }, 0);
 
     return () => {
+      clearTimeout(timer);
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
         streamRef.current = null;

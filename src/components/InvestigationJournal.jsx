@@ -23,8 +23,11 @@ export default function InvestigationJournal({ isOpen, onClose }) {
   // Refresh journal data when opened
   useEffect(() => {
     if (isOpen) {
-      setJournalData(getJournalData());
-      setUnreviewedCount(getUnreviewedEvidenceCount());
+      const timer = setTimeout(() => {
+        setJournalData(getJournalData());
+        setUnreviewedCount(getUnreviewedEvidenceCount());
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [isOpen]);
 

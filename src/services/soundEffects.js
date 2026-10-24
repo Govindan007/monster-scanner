@@ -56,10 +56,25 @@ class SoundEffectsManager {
         this.masterGain = this.ctx.createGain();
         this.masterGain.gain.setValueAtTime(this.muted ? 0 : this.volume, this.ctx.currentTime);
         this.masterGain.connect(this.ctx.destination);
+
+        // Lifecycle: Suspend audio on app background to save battery, resume on return
+        if (typeof document !== 'undefined') {
+          document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+              if (this.ctx && this.ctx.state === 'running') {
+                this.ctx.suspend().catch(() => {});
+              }
+            } else {
+              if (this.ctx && this.ctx.state === 'suspended' && (this.isAmbientRunning || this.activeCreatureId)) {
+                this.ctx.resume().catch(() => {});
+              }
+            }
+          });
+        }
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
   }
 

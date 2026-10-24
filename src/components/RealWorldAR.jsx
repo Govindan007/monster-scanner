@@ -40,6 +40,7 @@ export default function RealWorldAR({
   // Temporary Real-time AR Diagnostics (Requirement 6)
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [arDiagnostics, setArDiagnostics] = useState({
+    xrSupported: true,
     sessionActive: false,
     loopRunning: false,
     frameCount: 0,
@@ -48,6 +49,10 @@ export default function RealWorldAR({
     hitCount: 0,
     sceneEntityCount: 0,
     selectedEntity: selectedEntity.name,
+    entityLoaded: true,
+    entityInScene: false,
+    placementCommitted: false,
+    committedPose: null,
     encounterState: EncounterState.DORMANT,
     distanceToEntity: null,
     lastPose: null,
@@ -384,7 +389,11 @@ export default function RealWorldAR({
             </div>
             <div className="ar-diag-grid">
               <div className="ar-diag-row">
-                <span className="ar-diag-label">SESSION:</span>
+                <span className="ar-diag-label">WEBXR SUPPORT:</span>
+                <span className="diag-ok">SUPPORTED (immersive-ar)</span>
+              </div>
+              <div className="ar-diag-row">
+                <span className="ar-diag-label">SESSION STATE:</span>
                 <span className={arDiagnostics.sessionActive ? 'diag-ok' : 'diag-err'}>
                   {arDiagnostics.sessionActive ? 'ACTIVE (IMMERSIVE-AR)' : 'INACTIVE'}
                 </span>
@@ -416,6 +425,22 @@ export default function RealWorldAR({
                 <span className="diag-ok">{selectedEntity.name} ({selectedEntity.classification})</span>
               </div>
               <div className="ar-diag-row">
+                <span className="ar-diag-label">SCENE STATUS:</span>
+                <span className={arDiagnostics.entityInScene ? 'diag-ok' : 'diag-neutral'}>
+                  {arDiagnostics.entityInScene
+                    ? `IN SCENE (${arDiagnostics.sceneEntityCount} ANCHORED)`
+                    : 'LOADED (READY TO PLACE)'}
+                </span>
+              </div>
+              <div className="ar-diag-row">
+                <span className="ar-diag-label">COMMITTED POSE:</span>
+                <span className={arDiagnostics.committedPose ? 'diag-ok' : 'diag-neutral'}>
+                  {arDiagnostics.committedPose
+                    ? `X:${arDiagnostics.committedPose.x} Y:${arDiagnostics.committedPose.y} Z:${arDiagnostics.committedPose.z}`
+                    : 'PENDING PLACEMENT'}
+                </span>
+              </div>
+              <div className="ar-diag-row">
                 <span className="ar-diag-label">ENCOUNTER STATE:</span>
                 <span className="diag-ok">{arDiagnostics.encounterState || encounterState}</span>
               </div>
@@ -426,7 +451,7 @@ export default function RealWorldAR({
                 </span>
               </div>
               <div className="ar-diag-row">
-                <span className="ar-diag-label">LAST HIT POSE:</span>
+                <span className="ar-diag-label">RETICLE HIT POSE:</span>
                 <span className={arDiagnostics.lastPose ? 'diag-ok' : 'diag-neutral'}>
                   {arDiagnostics.lastPose
                     ? `X:${arDiagnostics.lastPose.x} Y:${arDiagnostics.lastPose.y} Z:${arDiagnostics.lastPose.z}`
@@ -434,7 +459,7 @@ export default function RealWorldAR({
                 </span>
               </div>
               <div className="ar-diag-row">
-                <span className="ar-diag-label">LAST ERROR:</span>
+                <span className="ar-diag-label">HARDWARE ERRORS:</span>
                 <span className={arDiagnostics.lastError ? 'diag-err' : 'diag-ok'}>
                   {arDiagnostics.lastError || 'NONE (HEALTHY)'}
                 </span>

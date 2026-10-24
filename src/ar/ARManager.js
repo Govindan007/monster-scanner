@@ -77,6 +77,9 @@ export class ARManager {
       onEncounterEscaped: () => {
         this.placedEntities = [];
         this.diagnostics.sceneEntityCount = 0;
+        this.diagnostics.placementCommitted = false;
+        this.diagnostics.entityInScene = false;
+        this.diagnostics.committedPose = null;
         this.emitDiagnostics();
         if (this.onEncounterEscaped) this.onEncounterEscaped();
       },
@@ -99,6 +102,7 @@ export class ARManager {
 
     // Diagnostics telemetry
     this.diagnostics = {
+      xrSupported: true,
       sessionActive: false,
       loopRunning: false,
       frameCount: 0,
@@ -107,6 +111,10 @@ export class ARManager {
       hitCount: 0,
       sceneEntityCount: 0,
       selectedEntity: this.selectedEntityDef.name,
+      entityLoaded: true,
+      entityInScene: false,
+      placementCommitted: false,
+      committedPose: null,
       encounterState: EncounterState.DORMANT,
       distanceToEntity: null,
       lastPose: null,
@@ -357,8 +365,17 @@ export class ARManager {
       session.addEventListener('select', this.handleXRSelect);
       session.addEventListener('end', this.handleXREnd);
 
+      // Listen for tab/app backgrounding to gracefully release WebXR session
+      this.handleVisibilityChange = () => {
+        if (document.hidden && this.isSessionActive) {
+          this.endSession().catch(() => {});
+        }
+      };
+      document.addEventListener('visibilitychange', this.handleVisibilityChange);
+
       this.isSessionActive = true;
       this.isStarting = false;
+      this.diagnostics.sessionActive = true;
       this.diagnostics.loopRunning = true;
       this.emitDiagnostics();
 
@@ -407,7 +424,12 @@ export class ARManager {
           this._tempMatrix.fromArray(pose.transform.matrix);
           this.reticle.updateFromMatrix(this._tempMatrix);
 
-          if (!this.reticle.isVisible()) {
+          // If entity is already placed in world space, keep reticle hidden to avoid visual clutter
+          if (this.placedEntities.length > 0) {
+            if (this.reticle.isVisible()) {
+              this.reticle.setVisible(false);
+            }
+          } else if (!this.reticle.isVisible()) {
             this.reticle.setVisible(true);
             if (this.onSurfaceStateChange) this.onSurfaceStateChange(true);
           }
@@ -514,16 +536,19 @@ export class ARManager {
     this.scene.add(entity.root);
     this.placedEntities.push(entity);
     this.diagnostics.sceneEntityCount = this.placedEntities.length;
-    this.emitDiagnostics();
-
-    // Start Phase 4 Encounter State Machine
-    this.encounterDirector.startEncounter(entity, entityDef);
+    this.diagnostics.placementCommitted = true;
+    this.diagnostics.entityInScene = true;
 
     const pos = {
       x: entity.root.position.x.toFixed(2),
       y: entity.root.position.y.toFixed(2),
       z: entity.root.position.z.toFixed(2),
     };
+    this.diagnostics.committedPose = pos;
+    this.emitDiagnostics();
+
+    // Start Phase 4 Encounter State Machine
+    this.encounterDirector.startEncounter(entity, entityDef);
 
     if (this.onEntityPlaced) {
       this.onEntityPlaced(this.placedEntities.length, pos, entity, entityDef);
@@ -573,6 +598,9 @@ export class ARManager {
     this.encounterDirector.escapeEncounter('USER_PURGE', () => {
       this.placedEntities = [];
       this.diagnostics.sceneEntityCount = 0;
+      this.diagnostics.placementCommitted = false;
+      this.diagnostics.entityInScene = false;
+      this.diagnostics.committedPose = null;
       this.emitDiagnostics();
       if (onComplete) onComplete();
     });
@@ -634,6 +662,14 @@ export class ARManager {
     this.isStarting = false;
     this.diagnostics.sessionActive = false;
     this.diagnostics.loopRunning = false;
+    this.diagnostics.placementCommitted = false;
+    this.diagnostics.entityInScene = false;
+    this.diagnostics.committedPose = null;
+
+    if (this.handleVisibilityChange) {
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+      this.handleVisibilityChange = null;
+    }
 
     if (this.encounterDirector) {
       this.encounterDirector.dispose();

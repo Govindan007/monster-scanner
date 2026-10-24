@@ -62,12 +62,16 @@ export default function App() {
     if (glitchTimerRef.current) clearTimeout(glitchTimerRef.current);
   }, []);
 
+  const spawnAnomalyRef = useRef(null);
+
   // Schedule next anomaly after random delay of 8-15 seconds
   const scheduleNextAnomaly = useCallback(() => {
     if (anomalyScheduleTimerRef.current) clearTimeout(anomalyScheduleTimerRef.current);
     const delay = Math.floor(Math.random() * 7000 + 8000);
     anomalyScheduleTimerRef.current = setTimeout(() => {
-      spawnAnomaly();
+      if (spawnAnomalyRef.current) {
+        spawnAnomalyRef.current();
+      }
     }, delay);
   }, []);
 
@@ -119,6 +123,11 @@ export default function App() {
       }, 2000);
     }, visibleDuration);
   }, [clearAllTimers, scheduleNextAnomaly]);
+
+  // Keep spawnAnomalyRef in sync with latest memoized function
+  useEffect(() => {
+    spawnAnomalyRef.current = spawnAnomaly;
+  }, [spawnAnomaly]);
 
   // Handle entering scan mode
   const handleStartScan = useCallback((simulated = false) => {
