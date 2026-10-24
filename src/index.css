@@ -2002,3 +2002,101 @@ html, body {
   margin: 0;
   font-size: 11px;
 }
+
+/* ========================================================
+   TEMPORARY AR MOBILE DIAGNOSTICS PANEL (Requirement 6)
+   ======================================================== */
+
+.ar-diag-toggle-btn {
+  background: rgba(0, 240, 255, 0.12);
+  border: 1px solid var(--veil-cyan);
+  color: var(--veil-cyan);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 4px 9px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.2s ease;
+  pointer-events: auto;
+}
+
+.ar-diag-toggle-btn.active {
+  background: var(--veil-cyan);
+  color: #000;
+  box-shadow: 0 0 12px var(--veil-cyan);
+}
+
+.ar-diag-panel {
+  pointer-events: auto;
+  background: rgba(4, 7, 12, 0.95);
+  border: 1px solid rgba(0, 240, 255, 0.45);
+  box-shadow: 0 0 25px rgba(0, 0, 0, 0.9);
+  padding: 10px 14px;
+  width: 94%;
+  max-width: 380px;
+  margin: 6px auto 0;
+  backdrop-filter: blur(8px);
+  animation: fade-in-up 0.2s ease-out;
+  font-family: var(--font-mono);
+}
+
+.ar-diag-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--veil-cyan);
+  letter-spacing: 0.12em;
+  border-bottom: 1px dashed rgba(0, 240, 255, 0.25);
+  padding-bottom: 5px;
+  margin-bottom: 6px;
+}
+
+.ar-diag-close {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.ar-diag-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 3.5px;
+  font-size: 9.5px;
+}
+
+.ar-diag-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ar-diag-label {
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.05em;
+}
+
+.diag-ok {
+  color: #00ff88;
+  font-weight: 700;
+}
+
+.diag-warn {
+  color: #ffaa00;
+  font-weight: 700;
+}
+
+.diag-err {
+  color: #ff3344;
+  font-weight: 700;
+}
+
+.diag-neutral {
+  color: rgba(255, 255, 255, 0.6);
+}

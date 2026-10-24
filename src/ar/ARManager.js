@@ -6,8 +6,8 @@ import { PlacementReticle } from './PlacementReticle';
  * Clean AR Manager module orchestrating WebXR immersive-ar session,
  * Three.js scene, surface hit-testing, placement, and resource disposal.
  * 
- * Enforces single-session ownership across all instances and protects against
- * duplicate requestSession calls, React 18 remounts, and rapid user interactions.
+ * Enforces single-session ownership, exact reference space alignment,
+ * robust hit-testing and real-time mobile AR diagnostics.
  */
 export class ARManager {
   // Authoritative static state tracking the browser's single active WebXR session
@@ -24,6 +24,7 @@ export class ARManager {
     onEntityStateChange,
     onError,
     onSessionEnded,
+    onDiagnostics,
   }) {
     this.domOverlayRoot = domOverlayRoot;
     this.canvasContainer = canvasContainer;
@@ -32,6 +33,7 @@ export class ARManager {
     this.onEntityStateChange = onEntityStateChange;
     this.onError = onError;
     this.onSessionEnded = onSessionEnded;
+    this.onDiagnostics = onDiagnostics;
 
     // Instance lifecycle state
     this._disposed = false;
@@ -39,8 +41,27 @@ export class ARManager {
     this.isStarting = false;
     this.xrSession = null;
     this.hitTestSource = null;
-    this.referenceSpace = null;
     this.viewerSpace = null;
+
+    // Hit-testing cached state
+    this.latestHitPose = {
+      position: new THREE.Vector3(),
+      quaternion: new THREE.Quaternion(),
+      valid: false,
+    };
+
+    // Diagnostics telemetry
+    this.diagnostics = {
+      sessionActive: false,
+      loopRunning: false,
+      frameCount: 0,
+      hitSourceReady: false,
+      surfaceDetected: false,
+      hitCount: 0,
+      sceneEntityCount: 0,
+      lastPose: null,
+      lastError: null,
+    };
 
     // Three.js instances
     this.scene = null;
@@ -91,7 +112,6 @@ export class ARManager {
    * Authoritatively ends any active WebXR session across all instances
    */
   static async endAuthoritativeSession() {
-    // If a session is already in the middle of ending, wait for it
     if (ARManager._activeEndingPromise) {
       try {
         await ARManager._activeEndingPromise;
@@ -124,7 +144,6 @@ export class ARManager {
    * Internal helper requesting a new WebXR session with single-flight locking
    */
   async _requestNewXRSession() {
-    // If a request is already in-flight, return the shared promise
     if (ARManager._inFlightSessionPromise) {
       return await ARManager._inFlightSessionPromise;
     }
@@ -149,6 +168,15 @@ export class ARManager {
     })();
 
     return await ARManager._inFlightSessionPromise;
+  }
+
+  /**
+   * Emits diagnostics snapshot to UI
+   */
+  emitDiagnostics() {
+    if (this.onDiagnostics && !this._disposed) {
+      this.onDiagnostics({ ...this.diagnostics });
+    }
   }
 
   /**
@@ -190,23 +218,18 @@ export class ARManager {
 
       // 3. Coordinate session acquisition with single-session enforcement
       if (ARManager._inFlightSessionPromise) {
-        // A request is already in-flight (e.g. rapid taps or React StrictMode double-call)
         session = await ARManager._inFlightSessionPromise;
       } else if (ARManager._activeXRSession) {
-        // An active session already exists in the browser
         if (ARManager._activeManagerInstance && ARManager._activeManagerInstance !== this) {
-          // Previous instance is obsolete; shut down the old session before opening a new one
           await ARManager.endAuthoritativeSession();
           session = await this._requestNewXRSession();
         } else {
           session = ARManager._activeXRSession;
         }
       } else {
-        // No session or in-flight promise: request fresh session
         session = await this._requestNewXRSession();
       }
 
-      // Check if instance was unmounted while awaiting session creation / permissions dialog
       if (this._disposed) {
         if (session && ARManager._activeXRSession === session) {
           await ARManager.endAuthoritativeSession();
@@ -221,23 +244,27 @@ export class ARManager {
       this.xrSession = session;
       ARManager._activeXRSession = session;
       ARManager._activeManagerInstance = this;
+      this.diagnostics.sessionActive = true;
 
       // 4. Setup Three.js scene & lights
       this.scene = new THREE.Scene();
       this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-      const ambientLight = new THREE.AmbientLight(0x333333, 1.2);
+      // Bright ambient light ensures entity materials are clearly visible against real camera
+      const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
       this.scene.add(ambientLight);
 
-      const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
-      dirLight.position.set(0.5, 2.5, 0.5);
+      // Top directional light for 3D contour definition
+      const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
+      dirLight.position.set(0.5, 3.5, 0.5);
       this.scene.add(dirLight);
 
-      const horrorLight = new THREE.PointLight(0xff2a2a, 2.0, 8);
-      horrorLight.position.set(0, 1.8, 0);
+      // Atmospheric horror rim light
+      const horrorLight = new THREE.PointLight(0xff1122, 2.5, 10);
+      horrorLight.position.set(0, 2.0, 0);
       this.scene.add(horrorLight);
 
-      // 5. Setup Placement Reticle
+      // 5. Setup Placement Reticle (decomposed transform, depthTest:false)
       this.reticle = new PlacementReticle();
       this.scene.add(this.reticle.root);
 
@@ -254,7 +281,13 @@ export class ARManager {
       this.renderer.setPixelRatio(window.devicePixelRatio);
       this.renderer.setSize(window.innerWidth, window.innerHeight);
       this.renderer.xr.enabled = true;
-      this.renderer.xr.setReferenceSpaceType('local');
+
+      // Try local-floor so floor level matches Y=0, fallback to local
+      try {
+        this.renderer.xr.setReferenceSpaceType('local-floor');
+      } catch {
+        this.renderer.xr.setReferenceSpaceType('local');
+      }
 
       if (this.canvasContainer) {
         this.canvasContainer.innerHTML = '';
@@ -263,13 +296,10 @@ export class ARManager {
 
       await this.renderer.xr.setSession(session);
 
-      // 7. Request reference spaces & hit-test source
+      // 7. Request viewer space & hit-test source
       this.viewerSpace = await session.requestReferenceSpace('viewer');
-      this.referenceSpace = await session
-        .requestReferenceSpace('local-floor')
-        .catch(() => session.requestReferenceSpace('local'));
-
       this.hitTestSource = await session.requestHitTestSource({ space: this.viewerSpace });
+      this.diagnostics.hitSourceReady = true;
 
       // 8. Attach session listeners safely
       session.removeEventListener('select', this.handleXRSelect);
@@ -279,6 +309,8 @@ export class ARManager {
 
       this.isSessionActive = true;
       this.isStarting = false;
+      this.diagnostics.loopRunning = true;
+      this.emitDiagnostics();
 
       // 9. Start WebXR animation loop (guaranteed single loop)
       this.clock.start();
@@ -287,8 +319,9 @@ export class ARManager {
       console.error('ARManager: Initialization failure', err);
       this.isStarting = false;
       this.isSessionActive = false;
+      this.diagnostics.lastError = err.message || 'Initialization failure';
+      this.emitDiagnostics();
 
-      // Clear in-flight promise and stale session references on error
       ARManager._inFlightSessionPromise = null;
       if (this.xrSession && ARManager._activeXRSession === this.xrSession) {
         ARManager._activeXRSession = null;
@@ -307,34 +340,55 @@ export class ARManager {
   onFrame(timestamp, frame) {
     if (!frame || !this.renderer || !this.isSessionActive) return;
 
+    this.diagnostics.frameCount++;
     const delta = this.clock.getDelta();
     const elapsedTime = this.clock.getElapsedTime();
 
+    // Always use the EXACT reference space that Three.js uses to position the XR camera
+    const referenceSpace = this.renderer.xr.getReferenceSpace();
+
     // 1. Perform Hit-Testing
-    if (this.hitTestSource && this.referenceSpace && this.reticle) {
+    if (this.hitTestSource && referenceSpace && this.reticle) {
       const hitTestResults = frame.getHitTestResults(this.hitTestSource);
       if (hitTestResults.length > 0) {
         const hit = hitTestResults[0];
-        const pose = hit.getPose(this.referenceSpace);
+        const pose = hit.getPose(referenceSpace);
         if (pose) {
           this._tempMatrix.fromArray(pose.transform.matrix);
-          this.reticle.updateMatrix(this._tempMatrix);
+          this.reticle.updateFromMatrix(this._tempMatrix);
+
           if (!this.reticle.isVisible()) {
             this.reticle.setVisible(true);
             if (this.onSurfaceStateChange) this.onSurfaceStateChange(true);
           }
+
+          // Cache authoritative latest hit pose
+          const retPos = this.reticle.getPosition();
+          this.latestHitPose.position.copy(retPos);
+          this.latestHitPose.quaternion.copy(this.reticle.getQuaternion());
+          this.latestHitPose.valid = true;
+
+          this.diagnostics.hitCount++;
+          this.diagnostics.surfaceDetected = true;
+          this.diagnostics.lastPose = {
+            x: retPos.x.toFixed(2),
+            y: retPos.y.toFixed(2),
+            z: retPos.z.toFixed(2),
+          };
         }
       } else {
         if (this.reticle.isVisible()) {
           this.reticle.setVisible(false);
           if (this.onSurfaceStateChange) this.onSurfaceStateChange(false);
         }
+        this.diagnostics.surfaceDetected = false;
       }
     }
 
-    // 2. Update placed procedural entities (THE WATCHER)
-    if (this.camera) {
-      this.camera.getWorldPosition(this._tempCamPos);
+    // 2. Update placed procedural entities (THE WATCHER) using real XR camera pose
+    const xrCamera = this.renderer.xr.getCamera();
+    if (xrCamera) {
+      xrCamera.getWorldPosition(this._tempCamPos);
       for (let i = 0; i < this.placedEntities.length; i++) {
         this.placedEntities[i].update(elapsedTime, delta, this._tempCamPos);
       }
@@ -342,6 +396,11 @@ export class ARManager {
 
     // 3. Render scene
     this.renderer.render(this.scene, this.camera);
+
+    // Throttle diagnostics emission to React (every 20 frames)
+    if (this.diagnostics.frameCount % 20 === 0) {
+      this.emitDiagnostics();
+    }
   }
 
   /**
@@ -355,8 +414,9 @@ export class ARManager {
    * Explicitly places an entity at the reticle's current world-space pose
    */
   placeEntityAtCurrentReticle() {
-    if (!this.reticle || !this.reticle.isVisible() || !this.scene || !this.camera) {
-      return false;
+    if (!this.reticle || !this.reticle.isVisible() || !this.latestHitPose.valid || !this.scene) {
+      console.warn('ARManager: Surface not detected yet. Reticle is not locked onto a plane.');
+      return { success: false, reason: 'NO_SURFACE_DETECTED' };
     }
 
     // Instantiate THE WATCHER (production-quality 3D horror entity)
@@ -368,15 +428,25 @@ export class ARManager {
       },
     });
 
-    // Position in world space from reticle matrix pose
-    entity.root.position.setFromMatrixPosition(this.reticle.getMatrix());
+    // Position in world space directly from reticle's verified physical surface pose
+    entity.root.position.copy(this.latestHitPose.position);
 
-    // Face the camera horizontally upon initial spawn
-    this.camera.getWorldPosition(this._tempCamPos);
-    entity.root.lookAt(this._tempCamPos.x, entity.root.position.y, this._tempCamPos.z);
+    // Face the real XR camera horizontally upon initial spawn (with distance check to prevent NaN)
+    const xrCamera = this.renderer.xr.getCamera();
+    if (xrCamera) {
+      xrCamera.getWorldPosition(this._tempCamPos);
+      const dx = this._tempCamPos.x - entity.root.position.x;
+      const dz = this._tempCamPos.z - entity.root.position.z;
+      if (dx * dx + dz * dz > 0.01) {
+        entity.root.lookAt(this._tempCamPos.x, entity.root.position.y, this._tempCamPos.z);
+      }
+    }
 
+    entity.root.updateMatrixWorld(true);
     this.scene.add(entity.root);
     this.placedEntities.push(entity);
+    this.diagnostics.sceneEntityCount = this.placedEntities.length;
+    this.emitDiagnostics();
 
     const pos = {
       x: entity.root.position.x.toFixed(2),
@@ -388,7 +458,7 @@ export class ARManager {
       this.onEntityPlaced(this.placedEntities.length, pos, entity);
     }
 
-    return true;
+    return { success: true, count: this.placedEntities.length, position: pos };
   }
 
   /**
@@ -418,6 +488,8 @@ export class ARManager {
     let remaining = this.placedEntities.length;
     const entitiesToPurge = [...this.placedEntities];
     this.placedEntities = [];
+    this.diagnostics.sceneEntityCount = 0;
+    this.emitDiagnostics();
 
     entitiesToPurge.forEach((entity) => {
       entity.triggerDissolve(() => {
@@ -434,7 +506,6 @@ export class ARManager {
    * Handles WebXR session ending event fired by the browser
    */
   handleXREnd(event) {
-    // Ignore end event if it originated from a different session
     if (event && event.target && this.xrSession && event.target !== this.xrSession) {
       return;
     }
@@ -445,6 +516,10 @@ export class ARManager {
     if (ARManager._activeManagerInstance === this) {
       ARManager._activeManagerInstance = null;
     }
+
+    this.diagnostics.sessionActive = false;
+    this.diagnostics.loopRunning = false;
+    this.emitDiagnostics();
 
     this.cleanup();
 
@@ -481,6 +556,8 @@ export class ARManager {
     this._disposed = true;
     this.isSessionActive = false;
     this.isStarting = false;
+    this.diagnostics.sessionActive = false;
+    this.diagnostics.loopRunning = false;
 
     if (this.renderer) {
       try {
@@ -531,6 +608,7 @@ export class ARManager {
       }
     }
     this.placedEntities = [];
+    this.diagnostics.sceneEntityCount = 0;
 
     // Dispose scene children
     if (this.scene) {

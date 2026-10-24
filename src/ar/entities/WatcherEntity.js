@@ -39,28 +39,29 @@ export class WatcherEntity {
   }
 
   initModel() {
-    // 1. Shaded Materials: Obsidian charcoal with subtle specular sheen for camera visibility
+    // 1. Shaded Materials: Obsidian charcoal with subtle horror emissive sheen for camera visibility
     this.bodyMaterial = new THREE.MeshStandardMaterial({
-      color: 0x07090e,
-      roughness: 0.7,
-      metalness: 0.35,
+      color: 0x141824,
+      emissive: 0x080c16,
+      roughness: 0.55,
+      metalness: 0.45,
       transparent: true,
       opacity: 1.0,
     });
     this.disposables.push(this.bodyMaterial);
 
     this.eyeMaterial = new THREE.MeshBasicMaterial({
-      color: 0xe0f2fe, // Uncanny pale ice-white/cyan
+      color: 0xe0f8ff, // Uncanny pale ice-white/cyan
       transparent: true,
       opacity: 1.0,
     });
     this.disposables.push(this.eyeMaterial);
 
     this.ribAuraMaterial = new THREE.MeshBasicMaterial({
-      color: 0xaa2222,
+      color: 0xff2222,
       wireframe: true,
       transparent: true,
-      opacity: 0.25,
+      opacity: 0.45,
     });
     this.disposables.push(this.ribAuraMaterial);
 

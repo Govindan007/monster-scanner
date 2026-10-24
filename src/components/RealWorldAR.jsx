@@ -12,6 +12,20 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
   const [confirmationNotice, setConfirmationNotice] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
 
+  // Temporary Real-time AR Diagnostics (Requirement 6)
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [arDiagnostics, setArDiagnostics] = useState({
+    sessionActive: false,
+    loopRunning: false,
+    frameCount: 0,
+    hitSourceReady: false,
+    surfaceDetected: false,
+    hitCount: 0,
+    sceneEntityCount: 0,
+    lastPose: null,
+    lastError: null,
+  });
+
   // Scanning interaction state
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
@@ -37,11 +51,18 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
     if (!arManagerRef.current || isScanning) return;
 
     soundEffects.playAnomalySpawn();
-    const placed = arManagerRef.current.placeEntityAtCurrentReticle();
+    const result = arManagerRef.current.placeEntityAtCurrentReticle();
 
-    if (placed) {
+    if (result && result.success) {
       if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
       setConfirmationNotice('THE WATCHER MANIFESTED // POSITION LOCKED IN REAL SPACE');
+      noticeTimerRef.current = setTimeout(() => {
+        setConfirmationNotice(null);
+      }, 3500);
+    } else {
+      soundEffects.playButtonBeep(320, 0.12);
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+      setConfirmationNotice('NO SURFACE DETECTED YET // POINT CAMERA TOWARD FLOOR OR TABLE');
       noticeTimerRef.current = setTimeout(() => {
         setConfirmationNotice(null);
       }, 3500);
@@ -140,6 +161,9 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
           onExitARRef.current();
         }
       },
+      onDiagnostics: (data) => {
+        if (isMounted) setArDiagnostics(data);
+      },
     });
 
     arManagerRef.current = manager;
@@ -179,10 +203,90 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
             <span className="ar-pulse-dot"></span>
             <span>VEIL // REAL WORLD AR</span>
           </div>
-          <button className="ar-exit-button" onClick={handleExit}>
-            ✕ EXIT AR
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              className={`ar-diag-toggle-btn ${showDiagnostics ? 'active' : ''}`}
+              onClick={() => setShowDiagnostics((prev) => !prev)}
+              title="Toggle AR Hardware Diagnostics"
+            >
+              {showDiagnostics ? '⚡ DIAG: ON' : '⚙ DIAG'}
+            </button>
+            <button className="ar-exit-button" onClick={handleExit}>
+              ✕ EXIT AR
+            </button>
+          </div>
         </header>
+
+        {/* Temporary AR Mobile Diagnostics Panel (Requirement 6) */}
+        {showDiagnostics && (
+          <div className="ar-diag-panel">
+            <div className="ar-diag-title">
+              <span>AR HARDWARE TELEMETRY</span>
+              <button
+                className="ar-diag-close"
+                onClick={() => setShowDiagnostics(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="ar-diag-grid">
+              <div className="ar-diag-row">
+                <span className="ar-diag-label">SESSION:</span>
+                <span className={arDiagnostics.sessionActive ? 'diag-ok' : 'diag-err'}>
+                  {arDiagnostics.sessionActive ? 'ACTIVE (IMMERSIVE-AR)' : 'INACTIVE'}
+                </span>
+              </div>
+              <div className="ar-diag-row">
+                <span className="ar-diag-label">XR RENDER LOOP:</span>
+                <span className={arDiagnostics.loopRunning ? 'diag-ok' : 'diag-warn'}>
+                  {arDiagnostics.loopRunning
+                    ? `RUNNING (f: ${arDiagnostics.frameCount})`
+                    : 'STOPPED'}
+                </span>
+              </div>
+              <div className="ar-diag-row">
+                <span className="ar-diag-label">HIT-TEST SOURCE:</span>
+                <span className={arDiagnostics.hitSourceReady ? 'diag-ok' : 'diag-warn'}>
+                  {arDiagnostics.hitSourceReady ? 'READY (VIEWER RAY)' : 'INITIALIZING'}
+                </span>
+              </div>
+              <div className="ar-diag-row">
+                <span className="ar-diag-label">SURFACE (RETICLE):</span>
+                <span className={arDiagnostics.surfaceDetected ? 'diag-ok' : 'diag-warn'}>
+                  {arDiagnostics.surfaceDetected
+                    ? `DETECTED (hits: ${arDiagnostics.hitCount})`
+                    : 'SEARCHING FLOOR/TABLE...'}
+                </span>
+              </div>
+              <div className="ar-diag-row">
+                <span className="ar-diag-label">ENTITY MODEL:</span>
+                <span className="diag-ok">THE WATCHER (3D PROCEDURAL)</span>
+              </div>
+              <div className="ar-diag-row">
+                <span className="ar-diag-label">SCENE ENTITIES:</span>
+                <span className={arDiagnostics.sceneEntityCount > 0 ? 'diag-ok' : 'diag-neutral'}>
+                  {arDiagnostics.sceneEntityCount > 0
+                    ? `${arDiagnostics.sceneEntityCount} ANCHORED IN SCENE`
+                    : '0 (NOT PLACED YET)'}
+                </span>
+              </div>
+              <div className="ar-diag-row">
+                <span className="ar-diag-label">LAST HIT POSE:</span>
+                <span className={arDiagnostics.lastPose ? 'diag-ok' : 'diag-neutral'}>
+                  {arDiagnostics.lastPose
+                    ? `X:${arDiagnostics.lastPose.x} Y:${arDiagnostics.lastPose.y} Z:${arDiagnostics.lastPose.z}`
+                    : 'NONE'}
+                </span>
+              </div>
+              <div className="ar-diag-row">
+                <span className="ar-diag-label">LAST ERROR:</span>
+                <span className={arDiagnostics.lastError ? 'diag-err' : 'diag-ok'}>
+                  {arDiagnostics.lastError || 'NONE (HEALTHY)'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Central Guidance & Confirmation Alert */}
         <div className="ar-guidance-container">
