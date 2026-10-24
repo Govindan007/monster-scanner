@@ -1761,6 +1761,77 @@ html, body {
   line-height: 1.4;
 }
 
+.ar-confirmation-banner {
+  background: rgba(18, 5, 5, 0.95);
+  border: 1px solid var(--veil-red);
+  box-shadow: 0 0 25px rgba(255, 42, 42, 0.5);
+  padding: 8px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  animation: fade-in-up 0.25s ease-out;
+}
+
+.ar-confirm-tag {
+  color: var(--veil-red);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  animation: text-blink 0.8s infinite;
+}
+
+.ar-confirm-text {
+  color: var(--veil-white);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
+
+.ar-bottom-panel {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ar-placement-btn {
+  width: 100%;
+  padding: 14px 16px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ar-placement-btn.active {
+  background: var(--veil-red);
+  color: #000;
+  border-color: var(--veil-red);
+  box-shadow: 0 0 25px rgba(255, 42, 42, 0.6);
+  animation: pulse-dot 1.2s infinite alternate;
+}
+
+.ar-placement-btn.active:hover,
+.ar-placement-btn.active:active {
+  background: #ff4444;
+  transform: translateY(-1px);
+}
+
+.ar-placement-btn.disabled {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.4);
+  cursor: not-allowed;
+}
+
 .ar-bottom-telemetry {
   background: rgba(4, 7, 12, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -1769,6 +1840,7 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  backdrop-filter: blur(8px);
 }
 
 .ar-telemetry-row {
@@ -1783,6 +1855,11 @@ html, body {
 .ar-highlight {
   color: var(--veil-cyan);
   font-weight: 600;
+}
+
+.ar-highlight.locked {
+  color: var(--veil-green);
+  text-shadow: 0 0 6px var(--veil-green);
 }
 
 .ar-instructions {
