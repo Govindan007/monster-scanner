@@ -158,6 +158,32 @@ export class DrifterEntity {
     this.floatingGroup.add(this.particles);
   }
 
+  /**
+   * Updates encounter state from EncounterDirector
+   */
+  setEncounterState(encounterState) {
+    this._encounterState = encounterState;
+
+    if (encounterState === 'DISTURBED') {
+      this.triggerDisturbed();
+    } else if (encounterState === 'ESCAPING') {
+      this.triggerDissolve();
+    } else if (encounterState === 'SCANNING') {
+      this.beaconMaterial.color.setHex(0x00f0ff);
+      this.coreLight.color.setHex(0x00e5ff);
+      this.coreLight.intensity = 4.5;
+    } else if (encounterState === 'RESOLVED') {
+      this.beaconMaterial.color.setHex(0x7dd3fc);
+      this.coreLight.color.setHex(0x38bdf8);
+      this.coreLight.intensity = 3.0;
+    } else if (encounterState === 'OBSERVING') {
+      this.beaconMaterial.color.setHex(0xb366ff);
+      this.coreLight.color.setHex(0xa855f7);
+      this.coreLight.intensity = 2.2;
+      this.particleMaterial.color.setHex(0xc084fc);
+    }
+  }
+
   triggerDisturbed() {
     if (this.stateMachine.canTransitionTo(EntityState.DISTURBED)) {
       this.stateMachine.transitionTo(EntityState.DISTURBED);
@@ -175,10 +201,13 @@ export class DrifterEntity {
       this.stateMachine.transitionTo(EntityState.DISAPPEARING);
       this.dissolveProgress = 0;
       this.onDissolveComplete = onComplete;
+    } else if (onComplete) {
+      onComplete();
     }
   }
 
-  update(elapsedTime, delta, cameraWorldPos) {
+  update(elapsedTime, delta, cameraWorldPos, encounterState = null) {
+    const activeState = encounterState || this._encounterState || this.stateMachine.getCurrentState();
     const state = this.stateMachine.getCurrentState();
     if (state === EntityState.INACTIVE) return;
 
@@ -189,8 +218,20 @@ export class DrifterEntity {
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // 1. Smooth Levitation Physics (Base sine oscillation)
-    const hoverOffset = prefersReducedMotion ? 0 : Math.sin(elapsedTime * 1.7) * 0.12;
+    // Phase 4 Appearance Phase
+    if (activeState === 'APPEARING') {
+      const emergeProgress = Math.min(1.0, stateTime / 1.1);
+      this.floatingGroup.scale.set(emergeProgress, emergeProgress, emergeProgress);
+      this.shardMaterial.opacity = emergeProgress;
+      this.beaconMaterial.opacity = emergeProgress;
+      this.coreLight.intensity = emergeProgress * 2.2;
+      return;
+    } else {
+      this.floatingGroup.scale.set(1.0, 1.0, 1.0);
+    }
+
+    // 1. Smooth Levitation Physics (Base sine oscillation bounded strictly in local group space)
+    const hoverOffset = prefersReducedMotion ? 0 : Math.sin(elapsedTime * 1.7) * 0.08;
     this.floatingGroup.position.y = this.baseFloatingHeight + hoverOffset;
 
     // Core slow ambient tumble
@@ -203,19 +244,6 @@ export class DrifterEntity {
     // 2. STATE LOGIC
     switch (state) {
       case EntityState.IDLE:
-        // Gentle tendril breathing
-        if (!prefersReducedMotion) {
-          for (let i = 0; i < this.shards.length; i++) {
-            const shard = this.shards[i];
-            const wave = Math.sin(elapsedTime * 2.0 + i) * 0.05;
-            shard.holder.position.y = shard.basePos.y + wave;
-          }
-        }
-        if (stateTime > 2.0) {
-          this.stateMachine.transitionTo(EntityState.OBSERVING);
-        }
-        break;
-
       case EntityState.OBSERVING:
         // Bounded core tracking toward player's camera position
         if (cameraWorldPos && !prefersReducedMotion) {
@@ -230,16 +258,38 @@ export class DrifterEntity {
           this.floatingGroup.rotation.y = this._currentYaw;
         }
 
-        // Shards draw closer, pulsing softly
+        // Shards gentle orbit or scanning vortex
         if (!prefersReducedMotion) {
-          this.coreLight.intensity = 2.2 + Math.sin(elapsedTime * 3.2) * 0.5;
+          if (activeState === 'SCANNING') {
+            // Rapid vortex orbit during scan
+            const spinRate = elapsedTime * 3.2;
+            for (let i = 0; i < this.shards.length; i++) {
+              const shard = this.shards[i];
+              const shardAngle = spinRate + (i * Math.PI) / 2;
+              const radius = 0.34 + Math.sin(elapsedTime * 10.0) * 0.04;
+              shard.holder.position.x = Math.cos(shardAngle) * radius;
+              shard.holder.position.z = Math.sin(shardAngle) * radius;
+              shard.holder.position.y = shard.basePos.y + Math.sin(elapsedTime * 8.0 + i) * 0.06;
+            }
+            this.coreLight.intensity = 3.8 + Math.sin(elapsedTime * 25.0) * 1.4;
+          } else {
+            // Gentle undulation in observing
+            for (let i = 0; i < this.shards.length; i++) {
+              const shard = this.shards[i];
+              const wave = Math.sin(elapsedTime * 2.0 + i) * 0.04;
+              shard.holder.position.x = shard.basePos.x;
+              shard.holder.position.z = shard.basePos.z;
+              shard.holder.position.y = shard.basePos.y + wave;
+            }
+            this.coreLight.intensity = 2.2 + Math.sin(elapsedTime * 3.2) * 0.5;
+          }
         }
         break;
 
       case EntityState.DISTURBED:
         // Violent distortion reaction: shards flare outward, core jitters rapidly
         if (!prefersReducedMotion) {
-          const jitter = Math.sin(stateTime * 45.0) * 0.08 * Math.exp(-stateTime * 1.0);
+          const jitter = Math.sin(stateTime * 45.0) * 0.07 * Math.exp(-stateTime * 0.8);
           this.floatingGroup.position.x = jitter;
           this.floatingGroup.rotation.z = jitter * 1.5;
 
@@ -251,17 +301,18 @@ export class DrifterEntity {
           }
         }
 
-        if (stateTime > 2.5) {
+        if (stateTime > 2.8 && activeState !== 'DISTURBED' && activeState !== 'SCANNING') {
           this.beaconMaterial.color.setHex(0xb366ff);
           this.coreLight.color.setHex(0xa855f7);
           this.coreLight.intensity = 2.2;
           this.particleMaterial.color.setHex(0xc084fc);
+          this.floatingGroup.position.x = 0;
           this.stateMachine.transitionTo(EntityState.OBSERVING);
         }
         break;
 
       case EntityState.DISAPPEARING:
-        this.dissolveProgress += delta / 1.6;
+        this.dissolveProgress += delta / 1.5;
         const remainingAlpha = Math.max(0, 1.0 - this.dissolveProgress);
 
         this.shardMaterial.opacity = remainingAlpha;
@@ -270,11 +321,14 @@ export class DrifterEntity {
         this.particleMaterial.opacity = remainingAlpha * 0.75;
         this.coreLight.intensity = remainingAlpha * 2.5;
 
-        // Tendrils fly outward as it dissolves
+        // Implosion of core + dispersal of shards
+        const implosion = Math.max(0.01, 1.0 - this.dissolveProgress * 1.2);
+        this.coreMesh.scale.set(implosion, implosion, implosion);
+
         for (let i = 0; i < this.shards.length; i++) {
           const shard = this.shards[i];
-          shard.holder.position.x += shard.basePos.x * delta * 0.8;
-          shard.holder.position.y -= delta * 0.4;
+          shard.holder.position.x += shard.basePos.x * delta * 1.2;
+          shard.holder.position.y -= delta * 0.5;
         }
 
         if (this.dissolveProgress >= 1.0) {
@@ -282,6 +336,7 @@ export class DrifterEntity {
           this.root.visible = false;
           if (this.onDissolveComplete) {
             this.onDissolveComplete();
+            this.onDissolveComplete = null;
           }
         }
         break;

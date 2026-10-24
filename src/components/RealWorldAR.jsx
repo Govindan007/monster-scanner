@@ -1,11 +1,16 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { ARManager } from '../ar/ARManager';
+import { ARManager, EncounterState } from '../ar/ARManager';
 import { soundEffects } from '../services/soundEffects';
 import { getEntityById, getDefaultEntity } from '../ar/entities/EntityRegistry';
 import { recordEntityDiscovery } from '../services/discoveryStorage';
 import EntitySelector from './EntitySelector';
 
-export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecorded, initialEntityId = 'the-watcher' }) {
+export default function RealWorldAR({
+  onExitAR,
+  onEntityPlaced,
+  onEncounterRecorded,
+  initialEntityId = 'the-watcher',
+}) {
   const containerRef = useRef(null);
   const overlayRef = useRef(null);
   const arManagerRef = useRef(null);
@@ -14,10 +19,14 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
   const [selectedEntity, setSelectedEntity] = useState(() => getEntityById(initialEntityId) || getDefaultEntity());
   const [showSelector, setShowSelector] = useState(false);
 
+  // Surface & Placement state
   const [surfaceDetected, setSurfaceDetected] = useState(false);
   const [placedCount, setPlacedCount] = useState(0);
   const [confirmationNotice, setConfirmationNotice] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+
+  // Phase 4 Encounter Director State
+  const [encounterState, setEncounterState] = useState(EncounterState.DORMANT);
 
   // Temporary Real-time AR Diagnostics (Requirement 6)
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -30,6 +39,8 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
     hitCount: 0,
     sceneEntityCount: 0,
     selectedEntity: selectedEntity.name,
+    encounterState: EncounterState.DORMANT,
+    distanceToEntity: null,
     lastPose: null,
     lastError: null,
   });
@@ -41,7 +52,6 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
   const [scanGlitch, setScanGlitch] = useState(false);
 
   const noticeTimerRef = useRef(null);
-  const scanTimerRef = useRef(null);
 
   // Synchronized callback refs so prop updates do not re-trigger session initialization
   const onExitARRef = useRef(onExitAR);
@@ -67,7 +77,7 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
 
   // Handle explicit placement button or XR tap
   const handlePlaceEntity = useCallback(() => {
-    if (!arManagerRef.current || isScanning) return;
+    if (!arManagerRef.current || isScanning || encounterState !== EncounterState.DORMANT) return;
 
     soundEffects.playAnomalySpawn();
     const result = arManagerRef.current.placeEntityAtCurrentReticle(selectedEntity);
@@ -86,9 +96,9 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
         setConfirmationNotice(null);
       }, 3500);
     }
-  }, [isScanning, selectedEntity]);
+  }, [isScanning, encounterState, selectedEntity]);
 
-  // Handle scanning interaction
+  // Handle scanning interaction through EncounterDirector
   const handleStartScan = useCallback(() => {
     if (placedCount === 0 || isScanning || !arManagerRef.current) return;
 
@@ -97,67 +107,70 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
     setScanResult(null);
     soundEffects.playRadarPulse();
 
-    let currentProgress = 0;
-    const interval = 80;
-    const totalDuration = selectedEntity.scanDuration || 1800;
-    const step = (interval / totalDuration) * 100;
-
-    scanTimerRef.current = setInterval(() => {
-      currentProgress += step;
-      if (currentProgress >= 100) {
-        clearInterval(scanTimerRef.current);
-        scanTimerRef.current = null;
-        setScanProgress(100);
-
-        // Scan completes: trigger DISTURBED state on placed entity!
-        const result = arManagerRef.current.scanPlacedEntities();
-        soundEffects.playAnomalySpawn();
-
-        // Persist discovery record
-        if (result && result.id) {
-          recordEntityDiscovery(result.id, {
-            name: result.name,
-            code: result.code,
-            threat: result.threat,
-          });
-        }
-
-        // Brief visual screen glitch
+    const scanInfo = arManagerRef.current.scanPlacedEntities({
+      onProgress: (prog) => {
+        setScanProgress(prog);
+      },
+      onComplete: (res) => {
+        setIsScanning(false);
+        setScanResult(res);
         setScanGlitch(true);
         setTimeout(() => setScanGlitch(false), 450);
 
-        setIsScanning(false);
-        setScanResult(result);
+        // Persist discovery record
+        if (res && res.id) {
+          recordEntityDiscovery(res.id, {
+            name: res.name,
+            code: res.code,
+            threat: res.threat,
+            resonance: res.resonance,
+          });
+        }
 
-        // Record ONE successful encounter
         if (onEncounterRecordedRef.current) {
-          onEncounterRecordedRef.current(result);
+          onEncounterRecordedRef.current(res);
         }
-      } else {
-        setScanProgress(Math.floor(currentProgress));
-        if (Math.random() < 0.2) {
-          soundEffects.playRadarPulse();
-        }
-      }
-    }, interval);
-  }, [isScanning, placedCount, selectedEntity]);
+      },
+      onFail: ({ outcome, reason }) => {
+        setIsScanning(false);
+        soundEffects.playAnomalyLost();
+        setConfirmationNotice(`⚠ SCAN ABORTED: ${reason || outcome}`);
+        setTimeout(() => setConfirmationNotice(null), 3500);
+      },
+    });
+
+    if (!scanInfo) {
+      setIsScanning(false);
+    }
+  }, [isScanning, placedCount]);
+
+  // Handle cancelling active scan
+  const handleCancelScan = useCallback(() => {
+    if (!arManagerRef.current || !isScanning) return;
+    arManagerRef.current.cancelScan('USER_CANCELLED');
+    setIsScanning(false);
+    setScanProgress(0);
+    soundEffects.playButtonBeep(400, 0.1);
+    setConfirmationNotice('SCAN MANUALLY CANCELLED');
+    setTimeout(() => setConfirmationNotice(null), 2500);
+  }, [isScanning]);
 
   // Handle purging / dissolving the placed entity
   const handlePurgeEntity = useCallback(() => {
-    if (!arManagerRef.current) return;
+    if (!arManagerRef.current || isScanning) return;
     soundEffects.playAnomalyLost();
 
     arManagerRef.current.purgePlacedEntities(() => {
       setPlacedCount(0);
       setScanResult(null);
+      setEncounterState(EncounterState.DORMANT);
       setConfirmationNotice('ENTITY ENCOUNTER CONCLUDED // REALITY RE-STABILIZED');
       setTimeout(() => setConfirmationNotice(null), 3000);
     });
-  }, []);
+  }, [isScanning]);
 
   // Handle exit
   const handleExit = useCallback(() => {
-    if (scanTimerRef.current) clearInterval(scanTimerRef.current);
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
     if (arManagerRef.current) {
       arManagerRef.current.endSession();
@@ -192,6 +205,33 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
       onDiagnostics: (data) => {
         if (isMounted) setArDiagnostics(data);
       },
+      onEncounterStateChange: (newState) => {
+        if (isMounted) {
+          setEncounterState(newState);
+          soundEffects.playEncounterStateCue(newState);
+          if (newState === EncounterState.DISTURBED) {
+            setScanGlitch(true);
+            setTimeout(() => setScanGlitch(false), 350);
+          }
+        }
+      },
+      onScanProgress: (prog) => {
+        if (isMounted) setScanProgress(prog);
+      },
+      onScanOutcome: (outcome) => {
+        if (isMounted && outcome.success) {
+          setScanResult(outcome);
+          setIsScanning(false);
+        }
+      },
+      onEncounterEscaped: () => {
+        if (isMounted) {
+          setPlacedCount(0);
+          setScanResult(null);
+          setIsScanning(false);
+          setEncounterState(EncounterState.DORMANT);
+        }
+      },
     });
 
     arManagerRef.current = manager;
@@ -199,7 +239,6 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
 
     return () => {
       isMounted = false;
-      if (scanTimerRef.current) clearInterval(scanTimerRef.current);
       if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
       if (arManagerRef.current) {
         const mgr = arManagerRef.current;
@@ -239,6 +278,7 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
               className="ar-entity-select-trigger"
               onClick={() => setShowSelector(true)}
               title="Select Active Anomaly Entity"
+              disabled={isScanning || placedCount > 0}
             >
               <span className="ar-entity-select-icon">◈</span>
               <span className="ar-entity-select-name">{selectedEntity.name}</span>
@@ -304,15 +344,13 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
                 <span className="diag-ok">{selectedEntity.name} ({selectedEntity.classification})</span>
               </div>
               <div className="ar-diag-row">
-                <span className="ar-diag-label">MODEL TYPE:</span>
-                <span className="diag-ok">{selectedEntity.isProcedural ? '3D PROCEDURAL' : 'LOCAL GLTF/GLB'}</span>
+                <span className="ar-diag-label">ENCOUNTER STATE:</span>
+                <span className="diag-ok">{arDiagnostics.encounterState || encounterState}</span>
               </div>
               <div className="ar-diag-row">
-                <span className="ar-diag-label">SCENE ENTITIES:</span>
-                <span className={arDiagnostics.sceneEntityCount > 0 ? 'diag-ok' : 'diag-neutral'}>
-                  {arDiagnostics.sceneEntityCount > 0
-                    ? `${arDiagnostics.sceneEntityCount} ANCHORED IN SCENE`
-                    : '0 (NOT PLACED YET)'}
+                <span className="ar-diag-label">ENTITY DISTANCE:</span>
+                <span className={arDiagnostics.distanceToEntity ? 'diag-ok' : 'diag-neutral'}>
+                  {arDiagnostics.distanceToEntity ? `${arDiagnostics.distanceToEntity}m` : 'N/A'}
                 </span>
               </div>
               <div className="ar-diag-row">
@@ -359,11 +397,18 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
                 <span>RESONANCE FLUX: HIGH</span>
                 <span>{scanProgress}% COMPLETE</span>
               </div>
+              <button
+                className="ar-cancel-scan-action-btn"
+                onClick={handleCancelScan}
+                title="Cancel scan analysis"
+              >
+                ✕ ABORT SCAN
+              </button>
             </div>
           ) : scanResult ? (
             /* Scan Identification Result Card */
             <div className="ar-scan-result-card">
-              <div className="ar-result-tag">⚠ ANOMALY IDENTIFIED // THREAT DETECTED</div>
+              <div className="ar-result-tag">⚠ ANOMALY RESOLVED // THREAT RECORDED</div>
               <div className="ar-result-title">{scanResult.name}</div>
               <div className="ar-result-code">{scanResult.code}</div>
               <div className="ar-result-grid">
@@ -377,19 +422,31 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
                 </div>
               </div>
               <div className="ar-result-behavior">
-                BEHAVIOR: FIXATING ON OBSERVATION POSITION. ENTITY DISTURBED BY ACTIVE SCAN.
+                STATUS: {scanResult.behaviorSummary || 'ENTITY CATALOGUED IN DISCOVERY PERSISTENCE.'}
               </div>
             </div>
           ) : confirmationNotice ? (
             <div className="ar-confirmation-banner">
-              <span className="ar-confirm-tag">⚠ ANOMALY DETECTED</span>
+              <span className="ar-confirm-tag">⚠ ANOMALY ALERT</span>
               <span className="ar-confirm-text">{confirmationNotice}</span>
             </div>
           ) : (
             <div className="ar-status-banner">
-              {placedCount > 0 ? (
+              {encounterState === EncounterState.APPEARING ? (
+                <span className="ar-blink-text">
+                  DIMENSIONAL BREACH // MANIFESTING {selectedEntity.name.toUpperCase()}...
+                </span>
+              ) : encounterState === EncounterState.DISTURBED ? (
+                <span className="ar-alert-text">
+                  ⚠ {selectedEntity.name.toUpperCase()} DISTURBED // PSYCHIC FLUX SURGING
+                </span>
+              ) : encounterState === EncounterState.OBSERVING ? (
                 <span className="ar-locked-text">
-                  {selectedEntity.name} ACTIVE // WALK AROUND ENTITY OR TRIGGER SCAN
+                  {selectedEntity.name} ACTIVE // MAINTAIN DISTANCE (0.8m - 3.5m)
+                </span>
+              ) : encounterState === EncounterState.ESCAPING ? (
+                <span className="ar-dim-text">
+                  ENTITY DISPERSING // REALITY STABILIZING...
                 </span>
               ) : surfaceDetected ? (
                 <span className="ar-blink-text">
@@ -407,13 +464,13 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
           <footer className="ar-bottom-panel">
             {/* Primary Action Button Bar */}
             <div className="ar-actions-row">
-              {placedCount === 0 ? (
+              {placedCount === 0 || encounterState === EncounterState.DORMANT ? (
                 /* Placement Button */
                 <button
                   id="ar-place-button"
                   className={`ar-placement-btn ${surfaceDetected ? 'active' : 'disabled'}`}
                   onClick={handlePlaceEntity}
-                  disabled={!surfaceDetected}
+                  disabled={!surfaceDetected || encounterState !== EncounterState.DORMANT}
                   title={surfaceDetected ? `Anchor ${selectedEntity.name} to detected surface` : 'Scan for floor/surface first'}
                 >
                   <span className="ar-btn-icon">⚡</span>
@@ -428,7 +485,7 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
                     id="ar-scan-button"
                     className="action-btn scan-pulse-btn ar-active-scan-btn"
                     onClick={handleStartScan}
-                    disabled={isScanning}
+                    disabled={isScanning || encounterState === EncounterState.APPEARING || encounterState === EncounterState.ESCAPING}
                   >
                     <span className="btn-icon">⚡</span>
                     <span className="btn-text">
@@ -440,7 +497,7 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
                     id="ar-purge-button"
                     className="action-btn recalibrate-btn ar-purge-btn"
                     onClick={handlePurgeEntity}
-                    disabled={isScanning}
+                    disabled={isScanning || encounterState === EncounterState.ESCAPING}
                     title={`Dissolve and conclude encounter with ${selectedEntity.name}`}
                   >
                     DISPERSE ENTITY
@@ -458,14 +515,14 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
                 </span>
               </div>
               <div className="ar-telemetry-row">
-                <span className="ar-dim">TARGET ENTITY:</span>
+                <span className="ar-dim">ENCOUNTER STATE:</span>
                 <span className="ar-highlight">
-                  {placedCount > 0 ? `${selectedEntity.name} (${selectedEntity.classification})` : `${selectedEntity.name} [ARMED FOR MANIFESTATION]`}
+                  {encounterState} {arDiagnostics.distanceToEntity ? `[${arDiagnostics.distanceToEntity}m]` : ''}
                 </span>
               </div>
               <div className="ar-instructions">
                 {placedCount > 0
-                  ? `Walk around ${selectedEntity.name} in 3D room space. Press SCAN to analyze resonance.`
+                  ? `Walk around ${selectedEntity.name}. Distance must stay between 0.8m and 3.5m during scan.`
                   : 'Move phone across floor or table until the red reticle locks onto a plane.'}
               </div>
             </div>

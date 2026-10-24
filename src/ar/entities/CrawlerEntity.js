@@ -223,6 +223,34 @@ export class CrawlerEntity {
     this.root.add(this.particles);
   }
 
+  /**
+   * Updates encounter state from EncounterDirector
+   */
+  setEncounterState(encounterState) {
+    this._encounterState = encounterState;
+
+    if (encounterState === 'DISTURBED') {
+      this.triggerDisturbed();
+    } else if (encounterState === 'ESCAPING') {
+      this.triggerDissolve();
+    } else if (encounterState === 'SCANNING') {
+      this.primaryEyeMaterial.color.setHex(0xff2200);
+      this.eyeLight.color.setHex(0xff3300);
+      this.eyeLight.intensity = 4.2;
+    } else if (encounterState === 'RESOLVED') {
+      this.primaryEyeMaterial.color.setHex(0xf59e0b);
+      this.eyeLight.color.setHex(0xf59e0b);
+      this.eyeLight.intensity = 2.4;
+      this.bodyGroup.rotation.x = 0;
+      this.bodyGroup.position.y = 0.22;
+    } else if (encounterState === 'OBSERVING') {
+      this.primaryEyeMaterial.color.setHex(0xf59e0b);
+      this.eyeLight.color.setHex(0xf59e0b);
+      this.eyeLight.intensity = 2.0;
+      this.particleMaterial.color.setHex(0x10b981);
+    }
+  }
+
   triggerDisturbed() {
     if (this.stateMachine.canTransitionTo(EntityState.DISTURBED)) {
       this.stateMachine.transitionTo(EntityState.DISTURBED);
@@ -240,10 +268,13 @@ export class CrawlerEntity {
       this.stateMachine.transitionTo(EntityState.DISAPPEARING);
       this.dissolveProgress = 0;
       this.onDissolveComplete = onComplete;
+    } else if (onComplete) {
+      onComplete();
     }
   }
 
-  update(elapsedTime, delta, cameraWorldPos) {
+  update(elapsedTime, delta, cameraWorldPos, encounterState = null) {
+    const activeState = encounterState || this._encounterState || this.stateMachine.getCurrentState();
     const state = this.stateMachine.getCurrentState();
     if (state === EntityState.INACTIVE) return;
 
@@ -254,26 +285,19 @@ export class CrawlerEntity {
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+    // Phase 4 Appearance Phase: Emerging from below the floor
+    if (activeState === 'APPEARING') {
+      const emergeProgress = Math.min(1.0, stateTime / 1.1);
+      this.bodyGroup.position.y = -0.15 + emergeProgress * 0.37; // rises to 0.22m
+      this.chitinMaterial.opacity = emergeProgress;
+      this.primaryEyeMaterial.opacity = emergeProgress;
+      this.eyeLight.intensity = emergeProgress * 2.0;
+      return;
+    }
+
     // 1. STATE-SPECIFIC ANIMATION
     switch (state) {
       case EntityState.IDLE:
-        // Subtle carapace heaving & limb micro-twitching
-        if (!prefersReducedMotion) {
-          const heave = Math.sin(elapsedTime * 2.5) * 0.015;
-          this.bodyGroup.position.y = 0.22 + heave;
-
-          for (let i = 0; i < this.legs.length; i++) {
-            const leg = this.legs[i];
-            const twitch = Math.sin(elapsedTime * 3.5 + leg.index) * 0.04;
-            leg.upper.rotation.z = leg.baseAngleZ + twitch;
-          }
-        }
-
-        if (stateTime > 2.0) {
-          this.stateMachine.transitionTo(EntityState.OBSERVING);
-        }
-        break;
-
       case EntityState.OBSERVING:
         // Bounded orientation toward player camera position
         if (cameraWorldPos && !prefersReducedMotion) {
@@ -288,16 +312,35 @@ export class CrawlerEntity {
           this.root.rotation.y = this._currentYaw;
         }
 
-        // Subdued eye pulse
+        // Carapace breathing & subtle limb motion
         if (!prefersReducedMotion) {
-          this.eyeLight.intensity = 2.0 + Math.sin(elapsedTime * 4.0) * 0.5;
+          const heave = Math.sin(elapsedTime * 2.5) * 0.015;
+          this.bodyGroup.position.y = 0.22 + heave;
+
+          if (activeState === 'SCANNING') {
+            // Rapid chattering limb agitation during scanning
+            for (let i = 0; i < this.legs.length; i++) {
+              const leg = this.legs[i];
+              const chatter = Math.sin(elapsedTime * 35.0 + leg.index * 1.5) * 0.08;
+              leg.upper.rotation.z = leg.baseAngleZ + chatter;
+            }
+            this.eyeLight.intensity = 3.6 + Math.sin(elapsedTime * 30.0) * 1.2;
+            this.primaryEyeMaterial.color.setHex(0xff3300);
+          } else {
+            for (let i = 0; i < this.legs.length; i++) {
+              const leg = this.legs[i];
+              const twitch = Math.sin(elapsedTime * 3.5 + leg.index) * 0.03;
+              leg.upper.rotation.z = leg.baseAngleZ + twitch;
+            }
+            this.eyeLight.intensity = 2.0 + Math.sin(elapsedTime * 4.0) * 0.5;
+          }
         }
         break;
 
       case EntityState.DISTURBED:
         // Threat Posture: Carapace rears back, front limbs lift aggressively, spasmodic twitch
         if (!prefersReducedMotion) {
-          const rearAngle = -0.38 + Math.sin(stateTime * 25.0) * 0.05 * Math.exp(-stateTime * 1.0);
+          const rearAngle = -0.38 + Math.sin(stateTime * 25.0) * 0.05 * Math.exp(-stateTime * 0.8);
           this.bodyGroup.rotation.x = rearAngle;
           this.bodyGroup.position.y = 0.28;
 
@@ -305,14 +348,14 @@ export class CrawlerEntity {
           for (let i = 0; i < this.legs.length; i++) {
             const leg = this.legs[i];
             if (leg.isFront) {
-              leg.upper.rotation.z = leg.baseAngleZ * 0.4 + Math.sin(stateTime * 30.0) * 0.08;
+              leg.upper.rotation.z = leg.baseAngleZ * 0.35 + Math.sin(stateTime * 30.0) * 0.09;
             } else {
               leg.upper.rotation.z = leg.baseAngleZ + Math.sin(stateTime * 20.0) * 0.04;
             }
           }
         }
 
-        if (stateTime > 2.5) {
+        if (stateTime > 2.8 && activeState !== 'DISTURBED' && activeState !== 'SCANNING') {
           this.primaryEyeMaterial.color.setHex(0xf59e0b);
           this.eyeLight.color.setHex(0xf59e0b);
           this.eyeLight.intensity = 2.0;
@@ -335,13 +378,23 @@ export class CrawlerEntity {
         this.particleMaterial.opacity = remainingAlpha * 0.7;
         this.eyeLight.intensity = remainingAlpha * 2.0;
 
-        this.bodyGroup.position.y = 0.22 - this.dissolveProgress * 0.2;
+        // Burrowing down through floor plane
+        this.bodyGroup.position.y = 0.22 - this.dissolveProgress * 0.25;
+
+        // Rapid chattering before disappearance
+        if (!prefersReducedMotion) {
+          for (let i = 0; i < this.legs.length; i++) {
+            const leg = this.legs[i];
+            leg.upper.rotation.z = leg.baseAngleZ + Math.sin(this.dissolveProgress * 40.0 + i) * 0.06;
+          }
+        }
 
         if (this.dissolveProgress >= 1.0) {
           this.stateMachine.transitionTo(EntityState.INACTIVE);
           this.root.visible = false;
           if (this.onDissolveComplete) {
             this.onDissolveComplete();
+            this.onDissolveComplete = null;
           }
         }
         break;

@@ -226,6 +226,32 @@ export class WatcherEntity {
   }
 
   /**
+   * Updates encounter state from EncounterDirector
+   */
+  setEncounterState(encounterState) {
+    this._encounterState = encounterState;
+
+    if (encounterState === 'DISTURBED') {
+      this.triggerDisturbed();
+    } else if (encounterState === 'ESCAPING') {
+      this.triggerDissolve();
+    } else if (encounterState === 'SCANNING') {
+      this.eyeMaterial.color.setHex(0x38bdf8);
+      this.eyeLight.color.setHex(0x00f0ff);
+      this.eyeLight.intensity = 4.0;
+    } else if (encounterState === 'RESOLVED') {
+      this.eyeMaterial.color.setHex(0xffffff);
+      this.eyeLight.color.setHex(0xffffff);
+      this.eyeLight.intensity = 2.5;
+    } else if (encounterState === 'OBSERVING') {
+      this.eyeMaterial.color.setHex(0xe0f8ff);
+      this.eyeLight.color.setHex(0x38bdf8);
+      this.eyeLight.intensity = 1.8;
+      this.particleMaterial.color.setHex(0xaa1111);
+    }
+  }
+
+  /**
    * Triggers DISTURBED state when scanned
    */
   triggerDisturbed() {
@@ -248,13 +274,16 @@ export class WatcherEntity {
       this.stateMachine.transitionTo(EntityState.DISAPPEARING);
       this.dissolveProgress = 0;
       this.onDissolveComplete = onComplete;
+    } else if (onComplete) {
+      onComplete();
     }
   }
 
   /**
    * Main per-frame animation update called by AR render loop
    */
-  update(elapsedTime, delta, cameraWorldPos) {
+  update(elapsedTime, delta, cameraWorldPos, encounterState = null) {
+    const activeState = encounterState || this._encounterState || this.stateMachine.getCurrentState();
     const state = this.stateMachine.getCurrentState();
     if (state === EntityState.INACTIVE) return;
 
@@ -265,23 +294,21 @@ export class WatcherEntity {
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+    // Phase 4 Encounter State Specific Adjustments
+    if (activeState === 'APPEARING') {
+      const emergeProgress = Math.min(1.0, stateTime / 1.1);
+      this.root.scale.set(1.0, emergeProgress, 1.0);
+      this.bodyMaterial.opacity = emergeProgress;
+      this.eyeMaterial.opacity = emergeProgress;
+      this.eyeLight.intensity = emergeProgress * 1.8;
+      return;
+    } else {
+      this.root.scale.set(1.0, 1.0, 1.0);
+    }
+
     // 1. STATE-SPECIFIC LOGIC
     switch (state) {
       case EntityState.IDLE:
-        // Subtle resting breathing
-        if (!prefersReducedMotion) {
-          const breathe = 1.0 + Math.sin(elapsedTime * 2.2) * 0.025;
-          this.torsoMesh.scale.set(breathe, 1.0, breathe);
-          this.leftArm.rotation.x = Math.sin(elapsedTime * 1.5) * 0.04;
-          this.rightArm.rotation.x = -Math.sin(elapsedTime * 1.5) * 0.04;
-          this.eyeLight.intensity = 1.6 + Math.sin(elapsedTime * 3.0) * 0.5;
-        }
-        // Auto transition to observing after 2 seconds
-        if (stateTime > 2.0) {
-          this.stateMachine.transitionTo(EntityState.OBSERVING);
-        }
-        break;
-
       case EntityState.OBSERVING:
         // Breathing
         if (!prefersReducedMotion) {
@@ -290,20 +317,27 @@ export class WatcherEntity {
           this.leftArm.rotation.x = Math.sin(elapsedTime * 1.5) * 0.04;
           this.rightArm.rotation.x = -Math.sin(elapsedTime * 1.5) * 0.04;
           this.eyeLight.intensity = 1.8 + Math.sin(elapsedTime * 3.0) * 0.4;
+
+          // Scanning intense resonance vibration
+          if (activeState === 'SCANNING') {
+            const scanJitter = Math.sin(elapsedTime * 45.0) * 0.015;
+            this.upperBodyGroup.position.x = scanJitter;
+            this.eyeLight.intensity = 3.5 + Math.sin(elapsedTime * 35.0) * 1.5;
+            this.ribAuraMaterial.opacity = 0.8;
+          } else {
+            this.upperBodyGroup.position.x = 0;
+            this.ribAuraMaterial.opacity = 0.45;
+          }
         }
 
         // Bounded Head & Upper Body Tracking toward viewer position
         if (cameraWorldPos && !prefersReducedMotion) {
-          // Convert camera world position to local space of entity root
           this._localCamPos.copy(cameraWorldPos);
           this.root.worldToLocal(this._localCamPos);
 
-          // Calculate yaw angle to camera (XZ plane)
           const angle = Math.atan2(this._localCamPos.x, this._localCamPos.z);
-          // Clamp rotation to maximum +/- 45 degrees so body remains anchored
           const clampedAngle = THREE.MathUtils.clamp(angle, -Math.PI / 4, Math.PI / 4);
 
-          // Smoothly interpolate head rotation
           this._targetHeadYaw = clampedAngle;
           this._currentHeadYaw = THREE.MathUtils.lerp(this._currentHeadYaw, this._targetHeadYaw, 0.05);
 
@@ -313,19 +347,18 @@ export class WatcherEntity {
         break;
 
       case EntityState.DISTURBED:
-        // Shudder / Twitch Reaction
+        // Spasmodic Head Tremor Reaction
         if (!prefersReducedMotion) {
-          const twitch = Math.sin(stateTime * 35.0) * 0.06 * Math.exp(-stateTime * 1.2);
+          const twitch = Math.sin(stateTime * 40.0) * 0.07 * Math.exp(-stateTime * 0.8);
           this.headGroup.rotation.z = twitch;
-          this.headGroup.rotation.x = -0.15 + Math.sin(stateTime * 20.0) * 0.04;
+          this.headGroup.rotation.x = -0.15 + Math.sin(stateTime * 25.0) * 0.05;
           this.leftArm.rotation.z = 0.2 + Math.sin(stateTime * 18.0) * 0.08;
           this.rightArm.rotation.z = -0.2 - Math.sin(stateTime * 18.0) * 0.08;
           this.eyeLight.intensity = 3.2 + Math.sin(stateTime * 40.0) * 1.2;
         }
 
-        // After 2.6 seconds, calm down back to OBSERVING
-        if (stateTime > 2.6) {
-          this.eyeMaterial.color.setHex(0xe0f2fe);
+        if (stateTime > 3.0 && activeState !== 'DISTURBED' && activeState !== 'SCANNING') {
+          this.eyeMaterial.color.setHex(0xe0f8ff);
           this.eyeLight.color.setHex(0x38bdf8);
           this.eyeLight.intensity = 1.8;
           this.particleMaterial.color.setHex(0xaa1111);
@@ -334,8 +367,7 @@ export class WatcherEntity {
         break;
 
       case EntityState.DISAPPEARING:
-        // Linear fade out over 1.8s
-        this.dissolveProgress += delta / 1.8;
+        this.dissolveProgress += delta / 1.6;
         const remainingAlpha = Math.max(0, 1.0 - this.dissolveProgress);
 
         this.bodyMaterial.opacity = remainingAlpha;
@@ -344,11 +376,15 @@ export class WatcherEntity {
         this.particleMaterial.opacity = remainingAlpha * 0.7;
         this.eyeLight.intensity = remainingAlpha * 1.8;
 
-        // Disperse particles outward
+        // Shadow elongation upwards into the void
+        this.root.scale.y = 1.0 + this.dissolveProgress * 0.35;
+        this.root.scale.x = remainingAlpha;
+        this.root.scale.z = remainingAlpha;
+
         if (this.particlePositions) {
           for (let i = 0; i < this.particleCount; i++) {
             this.particlePositions[i * 3 + 0] *= 1.02;
-            this.particlePositions[i * 3 + 1] += delta * 0.4;
+            this.particlePositions[i * 3 + 1] += delta * 0.55;
             this.particlePositions[i * 3 + 2] *= 1.02;
           }
           this.particles.geometry.attributes.position.needsUpdate = true;

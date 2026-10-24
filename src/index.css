@@ -2538,3 +2538,71 @@ html, body {
   box-shadow: 0 0 12px rgba(0, 255, 136, 0.25);
 }
 
+/* ========================================================
+   PHASE 4: ENCOUNTER DIRECTOR HUD & ACCESSIBILITY
+   ======================================================== */
+
+.ar-cancel-scan-action-btn {
+  margin-top: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  background: rgba(255, 0, 50, 0.15);
+  border: 1px solid rgba(255, 60, 60, 0.45);
+  color: #ff6677;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ar-cancel-scan-action-btn:hover {
+  background: rgba(255, 0, 50, 0.3);
+  color: #fff;
+  border-color: #ff3344;
+}
+
+.ar-alert-text {
+  color: #ff4455;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 8px rgba(255, 50, 50, 0.6);
+  animation: pulse-alert 1.2s infinite ease-in-out;
+}
+
+.ar-dim-text {
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.06em;
+  font-style: italic;
+}
+
+@keyframes pulse-alert {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.98); }
+}
+
+/* Accessibility: Respect user's reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .glitch-screen-burst,
+  .glitch-flicker-active,
+  .glitch-scan-slice {
+    display: none !important;
+  }
+
+  .ar-alert-text {
+    animation: none !important;
+  }
+}
+
+

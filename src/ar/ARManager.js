@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { getDefaultEntity, getEntityById } from './entities/EntityRegistry';
 import { PlacementReticle } from './PlacementReticle';
+import { EncounterDirector, EncounterState, ScanOutcome } from './encounter/EncounterDirector';
+
+export { EncounterState, ScanOutcome };
 
 /**
  * Clean AR Manager module orchestrating WebXR immersive-ar session,
@@ -25,6 +28,11 @@ export class ARManager {
     onError,
     onSessionEnded,
     onDiagnostics,
+    onEncounterStateChange,
+    onScanProgress,
+    onScanOutcome,
+    onEncounterResolved,
+    onEncounterEscaped,
   }) {
     this.domOverlayRoot = domOverlayRoot;
     this.canvasContainer = canvasContainer;
@@ -34,9 +42,40 @@ export class ARManager {
     this.onError = onError;
     this.onSessionEnded = onSessionEnded;
     this.onDiagnostics = onDiagnostics;
+    this.onEncounterStateChange = onEncounterStateChange;
+    this.onScanProgress = onScanProgress;
+    this.onScanOutcome = onScanOutcome;
+    this.onEncounterResolved = onEncounterResolved;
+    this.onEncounterEscaped = onEncounterEscaped;
 
     // Active Entity Definition from Registry
     this.selectedEntityDef = getDefaultEntity();
+
+    // Encounter Director (Phase 4 State Machine)
+    this.encounterDirector = new EncounterDirector({
+      onStateChange: (newState, prevState, context) => {
+        this.diagnostics.encounterState = newState;
+        this.emitDiagnostics();
+        if (this.onEncounterStateChange) {
+          this.onEncounterStateChange(newState, prevState, context);
+        }
+      },
+      onScanProgress: (prog) => {
+        if (this.onScanProgress) this.onScanProgress(prog);
+      },
+      onScanOutcome: (outcome) => {
+        if (this.onScanOutcome) this.onScanOutcome(outcome);
+      },
+      onEncounterResolved: (result) => {
+        if (this.onEncounterResolved) this.onEncounterResolved(result);
+      },
+      onEncounterEscaped: () => {
+        this.placedEntities = [];
+        this.diagnostics.sceneEntityCount = 0;
+        this.emitDiagnostics();
+        if (this.onEncounterEscaped) this.onEncounterEscaped();
+      },
+    });
 
     // Instance lifecycle state
     this._disposed = false;
@@ -63,6 +102,8 @@ export class ARManager {
       hitCount: 0,
       sceneEntityCount: 0,
       selectedEntity: this.selectedEntityDef.name,
+      encounterState: EncounterState.DORMANT,
+      distanceToEntity: null,
       lastPose: null,
       lastError: null,
     };
@@ -389,12 +430,13 @@ export class ARManager {
       }
     }
 
-    // 2. Update placed procedural entities (THE WATCHER) using real XR camera pose
+    // 2. Update placed procedural entities & EncounterDirector using real XR camera pose
     const xrCamera = this.renderer.xr.getCamera();
     if (xrCamera) {
       xrCamera.getWorldPosition(this._tempCamPos);
-      for (let i = 0; i < this.placedEntities.length; i++) {
-        this.placedEntities[i].update(elapsedTime, delta, this._tempCamPos);
+      this.encounterDirector.update(elapsedTime, delta, this._tempCamPos);
+      if (this.encounterDirector.currentDistance > 0) {
+        this.diagnostics.distanceToEntity = this.encounterDirector.currentDistance.toFixed(2);
       }
     }
 
@@ -469,6 +511,9 @@ export class ARManager {
     this.diagnostics.sceneEntityCount = this.placedEntities.length;
     this.emitDiagnostics();
 
+    // Start Phase 4 Encounter State Machine
+    this.encounterDirector.startEncounter(entity, entityDef);
+
     const pos = {
       x: entity.root.position.x.toFixed(2),
       y: entity.root.position.y.toFixed(2),
@@ -483,13 +528,16 @@ export class ARManager {
   }
 
   /**
-   * Scans the currently placed entity, triggering DISTURBED reaction
+   * Scans the currently placed entity through EncounterDirector
    */
-  scanPlacedEntities() {
+  scanPlacedEntities({ onProgress = null, onComplete = null, onFail = null } = {}) {
     if (this.placedEntities.length === 0) return null;
     const target = this.placedEntities[this.placedEntities.length - 1];
-    target.triggerDisturbed();
     const def = target._definition || this.selectedEntityDef || getDefaultEntity();
+
+    const started = this.encounterDirector.startScan({ onProgress, onComplete, onFail });
+    if (!started) return null;
+
     return {
       id: def.id,
       name: target.name || def.name,
@@ -502,7 +550,14 @@ export class ARManager {
   }
 
   /**
-   * Dissolves and removes placed entities cleanly from AR scene
+   * Cancels active scan
+   */
+  cancelScan(reason = 'USER_CANCELLED') {
+    this.encounterDirector.cancelScan(reason);
+  }
+
+  /**
+   * Dissolves and removes placed entities cleanly from AR scene via EncounterDirector
    */
   purgePlacedEntities(onComplete = null) {
     if (this.placedEntities.length === 0) {
@@ -510,20 +565,11 @@ export class ARManager {
       return;
     }
 
-    let remaining = this.placedEntities.length;
-    const entitiesToPurge = [...this.placedEntities];
-    this.placedEntities = [];
-    this.diagnostics.sceneEntityCount = 0;
-    this.emitDiagnostics();
-
-    entitiesToPurge.forEach((entity) => {
-      entity.triggerDissolve(() => {
-        entity.dispose();
-        remaining--;
-        if (remaining === 0 && onComplete) {
-          onComplete();
-        }
-      });
+    this.encounterDirector.escapeEncounter('USER_PURGE', () => {
+      this.placedEntities = [];
+      this.diagnostics.sceneEntityCount = 0;
+      this.emitDiagnostics();
+      if (onComplete) onComplete();
     });
   }
 
@@ -583,6 +629,10 @@ export class ARManager {
     this.isStarting = false;
     this.diagnostics.sessionActive = false;
     this.diagnostics.loopRunning = false;
+
+    if (this.encounterDirector) {
+      this.encounterDirector.dispose();
+    }
 
     if (this.renderer) {
       try {
