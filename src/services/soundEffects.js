@@ -290,6 +290,48 @@ class SoundEffectsManager {
       // Audio policy catch
     }
   }
+
+  // Phase 6: Radar Sweep Ping
+  playRadarSweepPing() {
+    if (this.muted || !this.ctx) return;
+    try {
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1200, now);
+      osc.frequency.exponentialRampToValueAtTime(800, now + 0.15);
+      gain.gain.setValueAtTime(0.035, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.15);
+    } catch {
+      // Audio policy catch
+    }
+  }
+
+  // Phase 6: Signal Proximity Beep (pitch & rate scale with signalPct 0..100)
+  playSignalBeep(signalPct = 50) {
+    if (this.muted || !this.ctx) return;
+    try {
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const freq = 440 + (Math.min(100, Math.max(0, signalPct)) * 8.5); // 440Hz -> 1290Hz
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(0.045, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.08);
+    } catch {
+      // Audio policy catch
+    }
+  }
 }
 
 export const soundEffects = new SoundEffectsManager();

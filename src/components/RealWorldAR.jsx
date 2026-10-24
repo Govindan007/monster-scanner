@@ -6,6 +6,7 @@ import { recordEntityDiscovery } from '../services/discoveryStorage';
 import { getUnreviewedEvidenceCount } from '../services/investigationStorage';
 import EntitySelector from './EntitySelector';
 import InvestigationJournal from './InvestigationJournal';
+import AnomalyRadarModal from './AnomalyRadarModal';
 
 export default function RealWorldAR({
   onExitAR,
@@ -21,6 +22,7 @@ export default function RealWorldAR({
   const [selectedEntity, setSelectedEntity] = useState(() => getEntityById(initialEntityId) || getDefaultEntity());
   const [showSelector, setShowSelector] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
+  const [showRadar, setShowRadar] = useState(false);
   const [unreviewedCount, setUnreviewedCount] = useState(() => getUnreviewedEvidenceCount());
 
   // Surface & Placement state
@@ -173,6 +175,19 @@ export default function RealWorldAR({
     });
   }, [isScanning]);
 
+  // Handle targeting an anomaly from the radar in AR
+  const handleEngageFromRadar = useCallback((anomaly) => {
+    const targetEntity = getEntityById(anomaly.entityId);
+    if (targetEntity) {
+      setSelectedEntity(targetEntity);
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+      setConfirmationNotice(`${anomaly.title} LOCKED // AIM AT FLOOR & TAP TO MANIFEST`);
+      noticeTimerRef.current = setTimeout(() => {
+        setConfirmationNotice(null);
+      }, 4000);
+    }
+  }, []);
+
   // Handle exit
   const handleExit = useCallback(() => {
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
@@ -311,6 +326,19 @@ export default function RealWorldAR({
               {unreviewedCount > 0 && (
                 <span className="ar-journal-badge">{unreviewedCount}</span>
               )}
+            </button>
+
+            {/* Anomaly Radar Button */}
+            <button
+              id="ar-radar-btn"
+              className="ar-journal-trigger-btn"
+              onClick={() => {
+                soundEffects.playButtonBeep(640, 0.06);
+                setShowRadar(true);
+              }}
+              title="Open Optical Anomaly Radar Matrix"
+            >
+              <span>📡 RADAR</span>
             </button>
 
             <button
@@ -572,6 +600,13 @@ export default function RealWorldAR({
             setShowJournal(false);
             setUnreviewedCount(getUnreviewedEvidenceCount());
           }}
+        />
+
+        {/* Optical Anomaly Radar Modal */}
+        <AnomalyRadarModal
+          isOpen={showRadar}
+          onClose={() => setShowRadar(false)}
+          onEngageAnomaly={handleEngageFromRadar}
         />
       </div>
     </div>

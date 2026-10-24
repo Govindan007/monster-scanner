@@ -4,6 +4,7 @@ import CameraFeed from './components/CameraFeed';
 import ScannerOverlay from './components/ScannerOverlay';
 import RealWorldAR from './components/RealWorldAR';
 import InvestigationJournal from './components/InvestigationJournal';
+import AnomalyRadarModal from './components/AnomalyRadarModal';
 import { soundEffects } from './services/soundEffects';
 import { checkWebXRSupport } from './services/deviceDiagnostics';
 import { getUnreviewedEvidenceCount } from './services/investigationStorage';
@@ -19,8 +20,9 @@ export default function App() {
   const [arSupported, setArSupported] = useState(null);
   const [arUnsupportedNotice, setArUnsupportedNotice] = useState(null);
 
-  // Investigation Journal state
+  // Investigation Journal & Radar state
   const [showJournal, setShowJournal] = useState(false);
+  const [showRadar, setShowRadar] = useState(false);
   const [unreviewedEvidenceCount, setUnreviewedEvidenceCount] = useState(() => getUnreviewedEvidenceCount());
 
   // Scanner state
@@ -117,7 +119,7 @@ export default function App() {
   }, [clearAllTimers, scheduleNextAnomaly]);
 
   // Handle entering scan mode
-  const handleStartScan = (simulated = false) => {
+  const handleStartScan = useCallback((simulated = false) => {
     setIsScanning(true);
     setIsSimulated(simulated);
     setRealityIntegrity(100);
@@ -131,7 +133,7 @@ export default function App() {
     anomalyScheduleTimerRef.current = setTimeout(() => {
       spawnAnomaly();
     }, initialDelay);
-  };
+  }, [clearAllTimers, spawnAnomaly]);
 
   // Manual Trigger: SCAN button
   const handleManualScan = () => {
@@ -205,6 +207,17 @@ export default function App() {
     setUnreviewedEvidenceCount(getUnreviewedEvidenceCount());
   }, []);
 
+  // Handle engaging an anomaly from the radar in 2D or landing mode
+  const handleEngageAnomaly = useCallback((anomaly) => {
+    setSelectedEntityId(anomaly.entityId);
+    setShowRadar(false);
+    soundEffects.playAnomalyDetected();
+
+    if (!isScanning) {
+      handleStartScan(false);
+    }
+  }, [isScanning, handleStartScan]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -221,6 +234,7 @@ export default function App() {
           onStartSimulated={() => handleStartScan(true)}
           onOpenJournal={() => setShowJournal(true)}
           unreviewedEvidenceCount={unreviewedEvidenceCount}
+          onOpenRadar={() => setShowRadar(true)}
         />
       ) : isARActive ? (
         /* Real-World Tracked WebXR AR Mode */
@@ -263,6 +277,7 @@ export default function App() {
             setArUnsupportedNotice={setArUnsupportedNotice}
             onOpenJournal={() => setShowJournal(true)}
             unreviewedEvidenceCount={unreviewedEvidenceCount}
+            onOpenRadar={() => setShowRadar(true)}
           />
         </div>
       )}
@@ -274,6 +289,13 @@ export default function App() {
           setShowJournal(false);
           setUnreviewedEvidenceCount(getUnreviewedEvidenceCount());
         }}
+      />
+
+      {/* Anomaly Radar Matrix Modal at App root for 2D scanner & landing */}
+      <AnomalyRadarModal
+        isOpen={showRadar}
+        onClose={() => setShowRadar(false)}
+        onEngageAnomaly={handleEngageAnomaly}
       />
     </div>
   );

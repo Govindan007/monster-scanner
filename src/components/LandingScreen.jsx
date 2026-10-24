@@ -1,7 +1,13 @@
 import React from 'react';
 import { soundEffects } from '../services/soundEffects';
 
-export default function LandingScreen({ onStartScan, onStartSimulated, onOpenJournal, unreviewedEvidenceCount = 0 }) {
+export default function LandingScreen({
+  onStartScan,
+  onStartSimulated,
+  onOpenJournal,
+  unreviewedEvidenceCount = 0,
+  onOpenRadar,
+}) {
 
   const handleStart = (useSimulated = false) => {
     // User interaction enables Web Audio
@@ -105,6 +111,20 @@ export default function LandingScreen({ onStartScan, onStartSimulated, onOpenJou
               {unreviewedEvidenceCount > 0 && (
                 <span className="journal-badge-pulse">{unreviewedEvidenceCount} NEW</span>
               )}
+            </button>
+          )}
+
+          {onOpenRadar && (
+            <button
+              type="button"
+              id="landing-radar-btn"
+              className="landing-radar-button"
+              onClick={() => {
+                soundEffects.playButtonBeep(640, 0.06);
+                onOpenRadar();
+              }}
+            >
+              <span>📡 OPTICAL ANOMALY RADAR MATRIX</span>
             </button>
           )}
 

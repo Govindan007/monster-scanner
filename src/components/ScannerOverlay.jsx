@@ -26,6 +26,7 @@ export default function ScannerOverlay({
   setArUnsupportedNotice,
   onOpenJournal,
   unreviewedEvidenceCount = 0,
+  onOpenRadar,
 }) {
   const [isMuted, setIsMuted] = useState(soundEffects.isMuted());
   const [timecode, setTimecode] = useState('00:00:00:00');
@@ -138,6 +139,17 @@ export default function ScannerOverlay({
               {unreviewedEvidenceCount > 0 && (
                 <span className="hud-badge-counter">{unreviewedEvidenceCount}</span>
               )}
+            </button>
+          )}
+
+          {/* Anomaly Radar Matrix */}
+          {onOpenRadar && (
+            <button
+              className="hud-icon-button hud-radar-btn"
+              onClick={onOpenRadar}
+              title="Open Optical Anomaly Radar Matrix"
+            >
+              <span>📡</span>
             </button>
           )}
 
