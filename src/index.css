@@ -1870,3 +1870,135 @@ html, body {
   color: var(--veil-dim-white);
   font-style: italic;
 }
+
+/* ========================================================
+   THE WATCHER: AR SCANNING & ENCOUNTER CONTROLS
+   ======================================================== */
+
+.ar-scan-progress-card {
+  background: rgba(8, 12, 18, 0.95);
+  border: 1px solid var(--veil-cyan);
+  box-shadow: 0 0 25px rgba(0, 240, 255, 0.4);
+  padding: 12px 16px;
+  width: 90%;
+  max-width: 360px;
+  animation: fade-in-up 0.2s ease-out;
+}
+
+.ar-scan-progress-label {
+  font-size: 11px;
+  color: var(--veil-cyan);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin-bottom: 8px;
+}
+
+.ar-scan-progress-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.ar-scan-progress-fill {
+  height: 100%;
+  background: var(--veil-cyan);
+  box-shadow: 0 0 10px var(--veil-cyan);
+  transition: width 0.08s linear;
+}
+
+.ar-scan-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9.5px;
+  color: var(--veil-dim-white);
+}
+
+/* AR Scan Identification Card */
+.ar-scan-result-card {
+  background: rgba(14, 5, 5, 0.96);
+  border: 1px solid var(--veil-red);
+  box-shadow: 0 0 30px var(--veil-red-glow);
+  padding: 14px 18px;
+  width: 92%;
+  max-width: 380px;
+  animation: fade-in-up 0.25s ease-out;
+  text-align: left;
+}
+
+.ar-result-tag {
+  color: var(--veil-red);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  animation: text-blink 0.8s infinite;
+  margin-bottom: 4px;
+}
+
+.ar-result-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.15em;
+  line-height: 1.2;
+}
+
+.ar-result-code {
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.1em;
+  margin-bottom: 10px;
+}
+
+.ar-result-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  border-top: 1px dashed rgba(255, 42, 42, 0.3);
+  padding-top: 8px;
+  font-size: 10.5px;
+  margin-bottom: 10px;
+}
+
+.ar-result-grid .dim {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.ar-result-grid .highlight-red {
+  color: var(--veil-red);
+  font-weight: 700;
+}
+
+.ar-result-grid .highlight-cyan {
+  color: var(--veil-cyan);
+  font-weight: 700;
+}
+
+.ar-result-behavior {
+  font-size: 9.5px;
+  color: var(--veil-amber);
+  line-height: 1.35;
+  background: rgba(245, 158, 11, 0.08);
+  border-left: 2px solid var(--veil-amber);
+  padding: 5px 8px;
+}
+
+/* Post-placement action controls */
+.ar-encounter-controls {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.ar-active-scan-btn {
+  flex: 2;
+  margin: 0;
+}
+
+.ar-purge-btn {
+  flex: 1.2;
+  margin: 0;
+  font-size: 11px;
+}

@@ -190,6 +190,10 @@ export default function App() {
             scheduleNextAnomaly();
           }}
           onEntityPlaced={() => {
+            // Entity anchored to real physical surface
+          }}
+          onEncounterRecorded={() => {
+            // Record exactly one successful encounter upon scanning
             setAnomalyCount((prev) => prev + 1);
             setRealityIntegrity((prev) => Math.max(0, prev - 5));
           }}

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ProceduralShadowEntity } from './ProceduralShadowEntity';
+import { WatcherEntity } from './entities/WatcherEntity';
 import { PlacementReticle } from './PlacementReticle';
 
 /**
@@ -12,6 +12,7 @@ export class ARManager {
     canvasContainer,
     onSurfaceStateChange,
     onEntityPlaced,
+    onEntityStateChange,
     onError,
     onSessionEnded,
   }) {
@@ -19,6 +20,7 @@ export class ARManager {
     this.canvasContainer = canvasContainer;
     this.onSurfaceStateChange = onSurfaceStateChange;
     this.onEntityPlaced = onEntityPlaced;
+    this.onEntityStateChange = onEntityStateChange;
     this.onError = onError;
     this.onSessionEnded = onSessionEnded;
 
@@ -225,13 +227,19 @@ export class ARManager {
       return false;
     }
 
-    // Instantiate procedural 3D shadow humanoid
-    const entity = new ProceduralShadowEntity();
+    // Instantiate THE WATCHER (production-quality 3D horror entity)
+    const entity = new WatcherEntity({
+      onStateChange: (newState, prevState) => {
+        if (this.onEntityStateChange) {
+          this.onEntityStateChange(newState, prevState, entity);
+        }
+      },
+    });
 
     // Position in world space from reticle matrix pose
     entity.root.position.setFromMatrixPosition(this.reticle.getMatrix());
 
-    // Face the camera horizontally
+    // Face the camera horizontally upon initial spawn
     this.camera.getWorldPosition(this._tempCamPos);
     entity.root.lookAt(this._tempCamPos.x, entity.root.position.y, this._tempCamPos.z);
 
@@ -245,10 +253,49 @@ export class ARManager {
     };
 
     if (this.onEntityPlaced) {
-      this.onEntityPlaced(this.placedEntities.length, pos);
+      this.onEntityPlaced(this.placedEntities.length, pos, entity);
     }
 
     return true;
+  }
+
+  /**
+   * Scans the currently placed entity, triggering DISTURBED reaction
+   */
+  scanPlacedEntities() {
+    if (this.placedEntities.length === 0) return null;
+    const target = this.placedEntities[this.placedEntities.length - 1];
+    target.triggerDisturbed();
+    return {
+      name: target.name,
+      code: target.code,
+      threat: target.threat,
+      resonance: target.resonance,
+    };
+  }
+
+  /**
+   * Dissolves and removes placed entities cleanly from AR scene
+   */
+  purgePlacedEntities(onComplete = null) {
+    if (this.placedEntities.length === 0) {
+      if (onComplete) onComplete();
+      return;
+    }
+
+    let remaining = this.placedEntities.length;
+    const entitiesToPurge = [...this.placedEntities];
+    this.placedEntities = [];
+
+    entitiesToPurge.forEach((entity) => {
+      entity.triggerDissolve(() => {
+        entity.dispose();
+        remaining--;
+        if (remaining === 0 && onComplete) {
+          onComplete();
+        }
+      });
+    });
   }
 
   /**

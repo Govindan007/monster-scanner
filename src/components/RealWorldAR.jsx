@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { ARManager } from '../ar/ARManager';
 import { soundEffects } from '../services/soundEffects';
 
-export default function RealWorldAR({ onExitAR, onEntityPlaced }) {
+export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecorded }) {
   const containerRef = useRef(null);
   const overlayRef = useRef(null);
   const arManagerRef = useRef(null);
@@ -11,27 +11,93 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced }) {
   const [placedCount, setPlacedCount] = useState(0);
   const [confirmationNotice, setConfirmationNotice] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+
+  // Scanning interaction state
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+  const [scanResult, setScanResult] = useState(null);
+  const [scanGlitch, setScanGlitch] = useState(false);
+
   const noticeTimerRef = useRef(null);
+  const scanTimerRef = useRef(null);
 
   // Handle explicit placement button or XR tap
   const handlePlaceEntity = useCallback(() => {
-    if (!arManagerRef.current) return;
+    if (!arManagerRef.current || isScanning) return;
 
     soundEffects.playAnomalySpawn();
     const placed = arManagerRef.current.placeEntityAtCurrentReticle();
 
     if (placed) {
-      // Trigger short VEIL-style confirmation
       if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
-      setConfirmationNotice('ENTITY MANIFESTED // POSITION LOCKED IN REAL SPACE');
+      setConfirmationNotice('THE WATCHER MANIFESTED // POSITION LOCKED IN REAL SPACE');
       noticeTimerRef.current = setTimeout(() => {
         setConfirmationNotice(null);
       }, 3500);
     }
+  }, [isScanning]);
+
+  // Handle scanning interaction
+  const handleStartScan = useCallback(() => {
+    if (placedCount === 0 || isScanning || !arManagerRef.current) return;
+
+    setIsScanning(true);
+    setScanProgress(0);
+    setScanResult(null);
+    soundEffects.playRadarPulse();
+
+    let currentProgress = 0;
+    const interval = 80;
+    const totalDuration = 1800; // 1.8 seconds scan
+    const step = (interval / totalDuration) * 100;
+
+    scanTimerRef.current = setInterval(() => {
+      currentProgress += step;
+      if (currentProgress >= 100) {
+        clearInterval(scanTimerRef.current);
+        scanTimerRef.current = null;
+        setScanProgress(100);
+
+        // Scan completes: trigger DISTURBED state on Watcher!
+        const result = arManagerRef.current.scanPlacedEntities();
+        soundEffects.playAnomalySpawn();
+
+        // Brief visual screen glitch
+        setScanGlitch(true);
+        setTimeout(() => setScanGlitch(false), 450);
+
+        setIsScanning(false);
+        setScanResult(result);
+
+        // Record ONE successful encounter
+        if (onEncounterRecorded) {
+          onEncounterRecorded();
+        }
+      } else {
+        setScanProgress(Math.floor(currentProgress));
+        if (Math.random() < 0.2) {
+          soundEffects.playRadarPulse();
+        }
+      }
+    }, interval);
+  }, [isScanning, onEncounterRecorded, placedCount]);
+
+  // Handle purging / dissolving the placed entity
+  const handlePurgeEntity = useCallback(() => {
+    if (!arManagerRef.current) return;
+    soundEffects.playAnomalyLost();
+
+    arManagerRef.current.purgePlacedEntities(() => {
+      setPlacedCount(0);
+      setScanResult(null);
+      setConfirmationNotice('ENTITY ENCOUNTER CONCLUDED // REALITY RE-STABILIZED');
+      setTimeout(() => setConfirmationNotice(null), 3000);
+    });
   }, []);
 
   // Handle exit
   const handleExit = useCallback(() => {
+    if (scanTimerRef.current) clearInterval(scanTimerRef.current);
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
     if (arManagerRef.current) {
       arManagerRef.current.endSession();
@@ -65,6 +131,7 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced }) {
     manager.startSession();
 
     return () => {
+      if (scanTimerRef.current) clearInterval(scanTimerRef.current);
       if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
       if (arManagerRef.current) {
         arManagerRef.current.cleanup();
@@ -74,9 +141,17 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced }) {
   }, [onEntityPlaced, onExitAR]);
 
   return (
-    <div className="real-world-ar-container">
+    <div className={`real-world-ar-container ${scanGlitch ? 'glitch-flicker-active' : ''}`}>
       {/* Three.js Canvas Holder */}
       <div ref={containerRef} className="webxr-canvas-holder" />
+
+      {/* Screen Glitch Flash Overlay on Scan Reaction */}
+      {scanGlitch && (
+        <div className="glitch-screen-burst" aria-hidden="true">
+          <div className="glitch-color-channel-r"></div>
+          <div className="glitch-color-channel-b"></div>
+        </div>
+      )}
 
       {/* WebXR DOM Overlay for VEIL Horror UI */}
       <div ref={overlayRef} className="webxr-dom-overlay">
@@ -101,6 +176,43 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced }) {
                 RETURN TO CAMERA SCANNER
               </button>
             </div>
+          ) : isScanning ? (
+            /* Active Scan Progress Card */
+            <div className="ar-scan-progress-card">
+              <div className="ar-scan-progress-label">
+                <span className="blink-fast">⚡</span> ANALYZING METAPHYSICAL FREQUENCY...
+              </div>
+              <div className="ar-scan-progress-track">
+                <div
+                  className="ar-scan-progress-fill"
+                  style={{ width: `${scanProgress}%` }}
+                ></div>
+              </div>
+              <div className="ar-scan-progress-meta">
+                <span>RESONANCE FLUX: HIGH</span>
+                <span>{scanProgress}% COMPLETE</span>
+              </div>
+            </div>
+          ) : scanResult ? (
+            /* Scan Identification Result Card */
+            <div className="ar-scan-result-card">
+              <div className="ar-result-tag">⚠ ANOMALY IDENTIFIED // THREAT DETECTED</div>
+              <div className="ar-result-title">{scanResult.name}</div>
+              <div className="ar-result-code">{scanResult.code}</div>
+              <div className="ar-result-grid">
+                <div>
+                  <span className="dim">THREAT LEVEL:</span>{' '}
+                  <span className="highlight-red">{scanResult.threat}</span>
+                </div>
+                <div>
+                  <span className="dim">FREQUENCY:</span>{' '}
+                  <span className="highlight-cyan">{scanResult.resonance}</span>
+                </div>
+              </div>
+              <div className="ar-result-behavior">
+                BEHAVIOR: FIXATING ON OBSERVATION POSITION. ENTITY DISTURBED BY ACTIVE SCAN.
+              </div>
+            </div>
           ) : confirmationNotice ? (
             <div className="ar-confirmation-banner">
               <span className="ar-confirm-tag">⚠ ANOMALY DETECTED</span>
@@ -108,9 +220,13 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced }) {
             </div>
           ) : (
             <div className="ar-status-banner">
-              {surfaceDetected ? (
+              {placedCount > 0 ? (
+                <span className="ar-locked-text">
+                  THE WATCHER ACTIVE // WALK AROUND ENTITY OR TRIGGER SCAN
+                </span>
+              ) : surfaceDetected ? (
                 <span className="ar-blink-text">
-                  SURFACE DETECTED // TAP SCREEN OR BUTTON TO PLACE ENTITY
+                  SURFACE DETECTED // TAP SCREEN OR BUTTON TO PLACE THE WATCHER
                 </span>
               ) : (
                 <span>POINT CAMERA SLOWLY TOWARD FLOOR OR TABLE...</span>
@@ -119,22 +235,52 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced }) {
           )}
         </div>
 
-        {/* Bottom Placement Controls & Telemetry */}
+        {/* Bottom Controls & Telemetry */}
         {!errorMessage && (
           <footer className="ar-bottom-panel">
-            {/* Real AR Placement Button */}
-            <button
-              id="ar-place-button"
-              className={`ar-placement-btn ${surfaceDetected ? 'active' : 'disabled'}`}
-              onClick={handlePlaceEntity}
-              disabled={!surfaceDetected}
-              title={surfaceDetected ? 'Anchor entity to detected surface' : 'Scan for floor/surface first'}
-            >
-              <span className="ar-btn-icon">⚡</span>
-              <span className="ar-btn-label">
-                {surfaceDetected ? 'MANIFEST ENTITY ON SURFACE' : 'SCANNING FOR SURFACE...'}
-              </span>
-            </button>
+            {/* Primary Action Button Bar */}
+            <div className="ar-actions-row">
+              {placedCount === 0 ? (
+                /* Placement Button */
+                <button
+                  id="ar-place-button"
+                  className={`ar-placement-btn ${surfaceDetected ? 'active' : 'disabled'}`}
+                  onClick={handlePlaceEntity}
+                  disabled={!surfaceDetected}
+                  title={surfaceDetected ? 'Anchor entity to detected surface' : 'Scan for floor/surface first'}
+                >
+                  <span className="ar-btn-icon">⚡</span>
+                  <span className="ar-btn-label">
+                    {surfaceDetected ? 'MANIFEST THE WATCHER' : 'SCANNING FOR SURFACE...'}
+                  </span>
+                </button>
+              ) : (
+                /* Post-placement options: Scan or Disperse */
+                <div className="ar-encounter-controls">
+                  <button
+                    id="ar-scan-button"
+                    className="action-btn scan-pulse-btn ar-active-scan-btn"
+                    onClick={handleStartScan}
+                    disabled={isScanning}
+                  >
+                    <span className="btn-icon">⚡</span>
+                    <span className="btn-text">
+                      {isScanning ? 'ANALYZING...' : 'SCAN / PULSE ENTITY'}
+                    </span>
+                  </button>
+
+                  <button
+                    id="ar-purge-button"
+                    className="action-btn recalibrate-btn ar-purge-btn"
+                    onClick={handlePurgeEntity}
+                    disabled={isScanning}
+                    title="Dissolve and conclude encounter with The Watcher"
+                  >
+                    DISPERSE ENTITY
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* AR Telemetry Readouts */}
             <div className="ar-bottom-telemetry">
@@ -145,15 +291,15 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced }) {
                 </span>
               </div>
               <div className="ar-telemetry-row">
-                <span className="ar-dim">MANIFESTED ENTITIES:</span>
+                <span className="ar-dim">ENTITY STATUS:</span>
                 <span className="ar-highlight">
-                  {placedCount > 0 ? `${placedCount} ANCHORED (THE LURKER)` : '0 DETECTED'}
+                  {placedCount > 0 ? 'THE WATCHER (OBSERVING)' : 'SEARCHING FOR METAPHYSICAL RIFT'}
                 </span>
               </div>
               <div className="ar-instructions">
                 {placedCount > 0
-                  ? 'Entities stay pinned to physical coordinates. Walk around them in your room.'
-                  : 'Tap screen or press button when reticle aligns with floor to anchor a 3D entity.'}
+                  ? 'Walk around The Watcher in 3D room space. Press SCAN to analyze resonance.'
+                  : 'Move phone across floor or table until the red reticle locks onto a plane.'}
               </div>
             </div>
           </footer>
