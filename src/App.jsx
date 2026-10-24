@@ -132,18 +132,32 @@ export default function App() {
     spawnAnomaly();
   };
 
-  // Handler for ENTER REAL AR
-  const handleEnterRealAR = async () => {
-    soundEffects.playRadarPulse();
-    const xrCheck = await checkWebXRSupport();
-    setArSupported(xrCheck.supported);
+  const [isEnteringAR, setIsEnteringAR] = useState(false);
+  const enteringARLockRef = useRef(false);
 
-    if (xrCheck.supported) {
-      clearAllTimers();
-      setIsARActive(true);
-    } else {
-      soundEffects.playButtonBeep(340, 0.15);
-      setArUnsupportedNotice(xrCheck.reason);
+  // Handler for ENTER REAL AR with debounce & concurrency guard
+  const handleEnterRealAR = async () => {
+    if (enteringARLockRef.current || isARActive) return;
+    enteringARLockRef.current = true;
+    setIsEnteringAR(true);
+
+    soundEffects.playRadarPulse();
+    try {
+      const xrCheck = await checkWebXRSupport();
+      setArSupported(xrCheck.supported);
+
+      if (xrCheck.supported) {
+        clearAllTimers();
+        setIsARActive(true);
+      } else {
+        soundEffects.playButtonBeep(340, 0.15);
+        setArUnsupportedNotice(xrCheck.reason);
+      }
+    } finally {
+      setTimeout(() => {
+        enteringARLockRef.current = false;
+        setIsEnteringAR(false);
+      }, 600);
     }
   };
 
@@ -166,6 +180,23 @@ export default function App() {
     soundEffects.stopAmbientHum();
   };
 
+  // Stable AR callbacks
+  const handleExitAR = useCallback(() => {
+    setIsARActive(false);
+    soundEffects.playButtonBeep(600, 0.08);
+    scheduleNextAnomaly();
+  }, [scheduleNextAnomaly]);
+
+  const handleEntityPlaced = useCallback(() => {
+    // Entity anchored to real physical surface
+  }, []);
+
+  const handleEncounterRecorded = useCallback(() => {
+    // Record exactly one successful encounter upon scanning
+    setAnomalyCount((prev) => prev + 1);
+    setRealityIntegrity((prev) => Math.max(0, prev - 5));
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -184,19 +215,9 @@ export default function App() {
       ) : isARActive ? (
         /* Real-World Tracked WebXR AR Mode */
         <RealWorldAR
-          onExitAR={() => {
-            setIsARActive(false);
-            soundEffects.playButtonBeep(600, 0.08);
-            scheduleNextAnomaly();
-          }}
-          onEntityPlaced={() => {
-            // Entity anchored to real physical surface
-          }}
-          onEncounterRecorded={() => {
-            // Record exactly one successful encounter upon scanning
-            setAnomalyCount((prev) => prev + 1);
-            setRealityIntegrity((prev) => Math.max(0, prev - 5));
-          }}
+          onExitAR={handleExitAR}
+          onEntityPlaced={handleEntityPlaced}
+          onEncounterRecorded={handleEncounterRecorded}
         />
       ) : (
         /* Standard Camera Scanner (PC / Mobile default) */
@@ -223,6 +244,7 @@ export default function App() {
             showDiagnostics={showDiagnostics}
             setShowDiagnostics={setShowDiagnostics}
             onEnterRealAR={handleEnterRealAR}
+            isEnteringAR={isEnteringAR}
             arSupported={arSupported}
             arUnsupportedNotice={arUnsupportedNotice}
             setArUnsupportedNotice={setArUnsupportedNotice}

@@ -16,6 +16,7 @@ export default function ScannerOverlay({
   showDiagnostics,
   setShowDiagnostics,
   onEnterRealAR,
+  isEnteringAR = false,
   arSupported,
   arUnsupportedNotice,
   setArUnsupportedNotice,
@@ -287,12 +288,15 @@ export default function ScannerOverlay({
           id="enter-ar-button"
           className="action-btn enter-ar-btn"
           onClick={onEnterRealAR}
+          disabled={isEnteringAR}
           title="Launch Real-World Tracked WebXR AR (Hit-Test on physical surfaces)"
         >
           <span className="btn-icon">🌐</span>
-          <span className="btn-text">ENTER REAL AR</span>
+          <span className="btn-text">
+            {isEnteringAR ? 'CONNECTING TO AR...' : 'ENTER REAL AR'}
+          </span>
           <span className={`ar-badge-tag ${arSupported ? 'ready' : 'info'}`}>
-            {arSupported ? 'WEBXR READY' : 'WEBXR'}
+            {isEnteringAR ? 'STARTING' : arSupported ? 'WEBXR READY' : 'WEBXR'}
           </span>
         </button>
       </footer>

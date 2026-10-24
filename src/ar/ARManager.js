@@ -5,8 +5,17 @@ import { PlacementReticle } from './PlacementReticle';
 /**
  * Clean AR Manager module orchestrating WebXR immersive-ar session,
  * Three.js scene, surface hit-testing, placement, and resource disposal.
+ * 
+ * Enforces single-session ownership across all instances and protects against
+ * duplicate requestSession calls, React 18 remounts, and rapid user interactions.
  */
 export class ARManager {
+  // Authoritative static state tracking the browser's single active WebXR session
+  static _activeXRSession = null;
+  static _inFlightSessionPromise = null;
+  static _activeEndingPromise = null;
+  static _activeManagerInstance = null;
+
   constructor({
     domOverlayRoot,
     canvasContainer,
@@ -24,7 +33,8 @@ export class ARManager {
     this.onError = onError;
     this.onSessionEnded = onSessionEnded;
 
-    // Session state
+    // Instance lifecycle state
+    this._disposed = false;
     this.isSessionActive = false;
     this.isStarting = false;
     this.xrSession = null;
@@ -78,11 +88,80 @@ export class ARManager {
   }
 
   /**
-   * Starts the WebXR immersive-ar session
+   * Authoritatively ends any active WebXR session across all instances
+   */
+  static async endAuthoritativeSession() {
+    // If a session is already in the middle of ending, wait for it
+    if (ARManager._activeEndingPromise) {
+      try {
+        await ARManager._activeEndingPromise;
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
+    const session = ARManager._activeXRSession;
+    if (!session) return;
+
+    ARManager._activeEndingPromise = (async () => {
+      try {
+        await session.end();
+      } catch (err) {
+        console.warn('ARManager: Error during session.end():', err);
+      } finally {
+        if (ARManager._activeXRSession === session) {
+          ARManager._activeXRSession = null;
+        }
+        ARManager._activeEndingPromise = null;
+      }
+    })();
+
+    await ARManager._activeEndingPromise;
+  }
+
+  /**
+   * Internal helper requesting a new WebXR session with single-flight locking
+   */
+  async _requestNewXRSession() {
+    // If a request is already in-flight, return the shared promise
+    if (ARManager._inFlightSessionPromise) {
+      return await ARManager._inFlightSessionPromise;
+    }
+
+    const sessionOptions = {
+      requiredFeatures: ['hit-test'],
+      optionalFeatures: ['local-floor', 'dom-overlay'],
+    };
+
+    if (this.domOverlayRoot) {
+      sessionOptions.domOverlay = { root: this.domOverlayRoot };
+    }
+
+    ARManager._inFlightSessionPromise = (async () => {
+      try {
+        const session = await navigator.xr.requestSession('immersive-ar', sessionOptions);
+        ARManager._activeXRSession = session;
+        return session;
+      } finally {
+        ARManager._inFlightSessionPromise = null;
+      }
+    })();
+
+    return await ARManager._inFlightSessionPromise;
+  }
+
+  /**
+   * Starts the WebXR immersive-ar session with strict concurrency and lifecycle guards
    */
   async startSession() {
+    if (this._disposed) {
+      console.warn('ARManager: Cannot start session on disposed instance.');
+      return;
+    }
+
     if (this.isSessionActive || this.isStarting) {
-      console.warn('ARManager: Session already active or starting.');
+      console.warn('ARManager: Session already active or starting for this instance.');
       return;
     }
     this.isStarting = true;
@@ -94,20 +173,56 @@ export class ARManager {
         throw new Error(support.reason);
       }
 
-      // 2. Request WebXR session with hit-test as requiredFeature
-      const sessionOptions = {
-        requiredFeatures: ['hit-test'],
-        optionalFeatures: ['local-floor', 'dom-overlay'],
-      };
+      if (this._disposed) return;
 
-      if (this.domOverlayRoot) {
-        sessionOptions.domOverlay = { root: this.domOverlayRoot };
+      // 2. Wait for any previous session termination to finish completely
+      if (ARManager._activeEndingPromise) {
+        try {
+          await ARManager._activeEndingPromise;
+        } catch {
+          // ignore
+        }
       }
 
-      const session = await navigator.xr.requestSession('immersive-ar', sessionOptions);
-      this.xrSession = session;
+      if (this._disposed) return;
 
-      // 3. Setup Three.js scene & lights
+      let session = null;
+
+      // 3. Coordinate session acquisition with single-session enforcement
+      if (ARManager._inFlightSessionPromise) {
+        // A request is already in-flight (e.g. rapid taps or React StrictMode double-call)
+        session = await ARManager._inFlightSessionPromise;
+      } else if (ARManager._activeXRSession) {
+        // An active session already exists in the browser
+        if (ARManager._activeManagerInstance && ARManager._activeManagerInstance !== this) {
+          // Previous instance is obsolete; shut down the old session before opening a new one
+          await ARManager.endAuthoritativeSession();
+          session = await this._requestNewXRSession();
+        } else {
+          session = ARManager._activeXRSession;
+        }
+      } else {
+        // No session or in-flight promise: request fresh session
+        session = await this._requestNewXRSession();
+      }
+
+      // Check if instance was unmounted while awaiting session creation / permissions dialog
+      if (this._disposed) {
+        if (session && ARManager._activeXRSession === session) {
+          await ARManager.endAuthoritativeSession();
+        }
+        return;
+      }
+
+      if (!session) {
+        throw new Error('Failed to acquire valid WebXR immersive-ar session.');
+      }
+
+      this.xrSession = session;
+      ARManager._activeXRSession = session;
+      ARManager._activeManagerInstance = this;
+
+      // 4. Setup Three.js scene & lights
       this.scene = new THREE.Scene();
       this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
@@ -122,11 +237,19 @@ export class ARManager {
       horrorLight.position.set(0, 1.8, 0);
       this.scene.add(horrorLight);
 
-      // 4. Setup Placement Reticle
+      // 5. Setup Placement Reticle
       this.reticle = new PlacementReticle();
       this.scene.add(this.reticle.root);
 
-      // 5. Setup WebGL Renderer with alpha transparency for camera passthrough
+      // 6. Setup WebGL Renderer with alpha transparency for camera passthrough
+      if (this.renderer) {
+        try {
+          this.renderer.setAnimationLoop(null);
+          this.renderer.dispose();
+        } catch {
+          // ignore
+        }
+      }
       this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       this.renderer.setPixelRatio(window.devicePixelRatio);
       this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -140,7 +263,7 @@ export class ARManager {
 
       await this.renderer.xr.setSession(session);
 
-      // 6. Request reference spaces & hit-test source
+      // 7. Request reference spaces & hit-test source
       this.viewerSpace = await session.requestReferenceSpace('viewer');
       this.referenceSpace = await session
         .requestReferenceSpace('local-floor')
@@ -148,21 +271,30 @@ export class ARManager {
 
       this.hitTestSource = await session.requestHitTestSource({ space: this.viewerSpace });
 
-      // 7. Attach session listeners
+      // 8. Attach session listeners safely
+      session.removeEventListener('select', this.handleXRSelect);
+      session.removeEventListener('end', this.handleXREnd);
       session.addEventListener('select', this.handleXRSelect);
       session.addEventListener('end', this.handleXREnd);
 
       this.isSessionActive = true;
       this.isStarting = false;
 
-      // 8. Start WebXR animation loop
+      // 9. Start WebXR animation loop (guaranteed single loop)
       this.clock.start();
       this.renderer.setAnimationLoop((timestamp, frame) => this.onFrame(timestamp, frame));
     } catch (err) {
       console.error('ARManager: Initialization failure', err);
       this.isStarting = false;
       this.isSessionActive = false;
+
+      // Clear in-flight promise and stale session references on error
+      ARManager._inFlightSessionPromise = null;
+      if (this.xrSession && ARManager._activeXRSession === this.xrSession) {
+        ARManager._activeXRSession = null;
+      }
       this.cleanup();
+
       if (this.onError) {
         this.onError(err.message || 'Failed to start WebXR immersive-ar session.');
       }
@@ -173,7 +305,7 @@ export class ARManager {
    * Per-frame WebXR render loop
    */
   onFrame(timestamp, frame) {
-    if (!frame || !this.renderer) return;
+    if (!frame || !this.renderer || !this.isSessionActive) return;
 
     const delta = this.clock.getDelta();
     const elapsedTime = this.clock.getElapsedTime();
@@ -200,7 +332,7 @@ export class ARManager {
       }
     }
 
-    // 2. Update placed procedural entities
+    // 2. Update placed procedural entities (THE WATCHER)
     if (this.camera) {
       this.camera.getWorldPosition(this._tempCamPos);
       for (let i = 0; i < this.placedEntities.length; i++) {
@@ -299,35 +431,63 @@ export class ARManager {
   }
 
   /**
-   * Handles WebXR session ending
+   * Handles WebXR session ending event fired by the browser
    */
-  handleXREnd() {
+  handleXREnd(event) {
+    // Ignore end event if it originated from a different session
+    if (event && event.target && this.xrSession && event.target !== this.xrSession) {
+      return;
+    }
+
+    if (this.xrSession && ARManager._activeXRSession === this.xrSession) {
+      ARManager._activeXRSession = null;
+    }
+    if (ARManager._activeManagerInstance === this) {
+      ARManager._activeManagerInstance = null;
+    }
+
     this.cleanup();
+
     if (this.onSessionEnded) {
       this.onSessionEnded();
     }
   }
 
   /**
-   * Ends session gracefully
+   * Ends session gracefully and awaits termination
    */
-  endSession() {
+  async endSession() {
     if (this.xrSession) {
-      this.xrSession.end().catch(() => {});
+      const session = this.xrSession;
+      try {
+        await session.end();
+      } catch (err) {
+        console.warn('ARManager: endSession error:', err);
+      } finally {
+        if (ARManager._activeXRSession === session) {
+          ARManager._activeXRSession = null;
+        }
+        this.handleXREnd();
+      }
     } else {
       this.handleXREnd();
     }
   }
 
   /**
-   * Completely disposes all Three.js, WebXR, and DOM resources
+   * Completely disposes all Three.js, WebXR, and DOM resources safely
    */
   cleanup() {
+    this._disposed = true;
     this.isSessionActive = false;
     this.isStarting = false;
 
     if (this.renderer) {
-      this.renderer.setAnimationLoop(null);
+      try {
+        this.renderer.setAnimationLoop(null);
+      } catch {
+        // ignore
+      }
     }
 
     if (this.hitTestSource) {
@@ -340,45 +500,68 @@ export class ARManager {
     }
 
     if (this.xrSession) {
-      this.xrSession.removeEventListener('select', this.handleXRSelect);
-      this.xrSession.removeEventListener('end', this.handleXREnd);
+      try {
+        this.xrSession.removeEventListener('select', this.handleXRSelect);
+        this.xrSession.removeEventListener('end', this.handleXREnd);
+      } catch {
+        // ignore
+      }
+      if (ARManager._activeManagerInstance === this) {
+        ARManager._activeManagerInstance = null;
+      }
       this.xrSession = null;
     }
 
     // Dispose reticle
     if (this.reticle) {
-      this.reticle.dispose();
+      try {
+        this.reticle.dispose();
+      } catch {
+        // ignore
+      }
       this.reticle = null;
     }
 
     // Dispose all placed entities
     for (let i = 0; i < this.placedEntities.length; i++) {
-      this.placedEntities[i].dispose();
+      try {
+        this.placedEntities[i].dispose();
+      } catch {
+        // ignore
+      }
     }
     this.placedEntities = [];
 
     // Dispose scene children
     if (this.scene) {
-      this.scene.traverse((obj) => {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) {
-          if (Array.isArray(obj.material)) {
-            obj.material.forEach((m) => m.dispose());
-          } else {
-            obj.material.dispose();
+      try {
+        this.scene.traverse((obj) => {
+          if (obj.geometry) obj.geometry.dispose();
+          if (obj.material) {
+            if (Array.isArray(obj.material)) {
+              obj.material.forEach((m) => m.dispose());
+            } else {
+              obj.material.dispose();
+            }
           }
-        }
-      });
+        });
+      } catch {
+        // ignore
+      }
       this.scene = null;
     }
 
     // Dispose renderer and remove canvas
     if (this.renderer) {
-      this.renderer.dispose();
-      if (this.canvasContainer && this.renderer.domElement) {
-        if (this.canvasContainer.contains(this.renderer.domElement)) {
-          this.canvasContainer.removeChild(this.renderer.domElement);
+      try {
+        this.renderer.dispose();
+        if (this.canvasContainer && this.renderer.domElement) {
+          if (this.canvasContainer.contains(this.renderer.domElement)) {
+            this.canvasContainer.removeChild(this.renderer.domElement);
+          }
         }
+      } catch {
+        // ignore
       }
       this.renderer = null;
     }

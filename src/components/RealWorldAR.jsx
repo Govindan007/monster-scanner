@@ -21,6 +21,17 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
   const noticeTimerRef = useRef(null);
   const scanTimerRef = useRef(null);
 
+  // Synchronized callback refs so prop updates do not re-trigger session initialization
+  const onExitARRef = useRef(onExitAR);
+  const onEntityPlacedRef = useRef(onEntityPlaced);
+  const onEncounterRecordedRef = useRef(onEncounterRecorded);
+
+  useEffect(() => {
+    onExitARRef.current = onExitAR;
+    onEntityPlacedRef.current = onEntityPlaced;
+    onEncounterRecordedRef.current = onEncounterRecorded;
+  });
+
   // Handle explicit placement button or XR tap
   const handlePlaceEntity = useCallback(() => {
     if (!arManagerRef.current || isScanning) return;
@@ -70,8 +81,8 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
         setScanResult(result);
 
         // Record ONE successful encounter
-        if (onEncounterRecorded) {
-          onEncounterRecorded();
+        if (onEncounterRecordedRef.current) {
+          onEncounterRecordedRef.current();
         }
       } else {
         setScanProgress(Math.floor(currentProgress));
@@ -80,7 +91,7 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
         }
       }
     }, interval);
-  }, [isScanning, onEncounterRecorded, placedCount]);
+  }, [isScanning, placedCount]);
 
   // Handle purging / dissolving the placed entity
   const handlePurgeEntity = useCallback(() => {
@@ -101,29 +112,33 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
     if (arManagerRef.current) {
       arManagerRef.current.endSession();
-    } else {
-      onExitAR();
+    } else if (onExitARRef.current) {
+      onExitARRef.current();
     }
-  }, [onExitAR]);
+  }, []);
 
+  // Authoritative Single-Mount Session Initialization
   useEffect(() => {
+    let isMounted = true;
     if (!containerRef.current || !overlayRef.current) return;
 
     const manager = new ARManager({
       canvasContainer: containerRef.current,
       domOverlayRoot: overlayRef.current,
       onSurfaceStateChange: (hasSurface) => {
-        setSurfaceDetected(hasSurface);
+        if (isMounted) setSurfaceDetected(hasSurface);
       },
       onEntityPlaced: (count) => {
-        setPlacedCount(count);
-        if (onEntityPlaced) onEntityPlaced();
+        if (isMounted) setPlacedCount(count);
+        if (onEntityPlacedRef.current) onEntityPlacedRef.current();
       },
       onError: (msg) => {
-        setErrorMessage(msg);
+        if (isMounted) setErrorMessage(msg);
       },
       onSessionEnded: () => {
-        onExitAR();
+        if (onExitARRef.current) {
+          onExitARRef.current();
+        }
       },
     });
 
@@ -131,14 +146,17 @@ export default function RealWorldAR({ onExitAR, onEntityPlaced, onEncounterRecor
     manager.startSession();
 
     return () => {
+      isMounted = false;
       if (scanTimerRef.current) clearInterval(scanTimerRef.current);
       if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
       if (arManagerRef.current) {
-        arManagerRef.current.cleanup();
+        const mgr = arManagerRef.current;
         arManagerRef.current = null;
+        mgr.endSession().catch(() => {});
+        mgr.cleanup();
       }
     };
-  }, [onEntityPlaced, onExitAR]);
+  }, []);
 
   return (
     <div className={`real-world-ar-container ${scanGlitch ? 'glitch-flicker-active' : ''}`}>
