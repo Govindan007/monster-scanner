@@ -187,7 +187,7 @@ export class ProceduralShadowEntity {
     this.root.add(this.particles);
   }
 
-  update(elapsedTime, delta, cameraWorldPos) {
+  update(elapsedTime, delta, _cameraWorldPos) {
     const prefersReducedMotion =
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;

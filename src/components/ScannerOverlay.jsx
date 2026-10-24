@@ -43,9 +43,9 @@ export default function ScannerOverlay({
   useEffect(() => {
     const freqTimer = setInterval(() => {
       if (activeAnomaly) {
-        setFluctuatingFreq((prev) => (Math.random() * 20 + 130).toFixed(1));
+        setFluctuatingFreq((Math.random() * 20 + 130).toFixed(1));
       } else {
-        setFluctuatingFreq((prev) => (Math.random() * 1.5 + 87.8).toFixed(1));
+        setFluctuatingFreq((Math.random() * 1.5 + 87.8).toFixed(1));
       }
     }, 400);
 

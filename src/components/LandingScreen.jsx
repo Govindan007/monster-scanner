@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { soundEffects } from '../services/soundEffects';
 
 export default function LandingScreen({ onStartScan, onStartSimulated }) {
-  const [hovered, setHovered] = useState(false);
 
   const handleStart = (useSimulated = false) => {
     // User interaction enables Web Audio
