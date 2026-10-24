@@ -1,0 +1,32 @@
+export const HORROR_ENTITIES = [
+  {
+    id: 'shadow',
+    title: 'THE LURKER',
+    code: 'SPEC-079 // CLASS IV',
+    image: '/assets/entities/entity_shadow.jpg',
+    resonance: '89.4 MHz',
+    threat: 'CRITICAL',
+    description: 'Bipedal skeletal shadow entity. Exhibits thermodynamic absorption and erratic positional jitter.',
+    distortionClass: 'entity-glitch-heavy',
+  },
+  {
+    id: 'face',
+    title: 'THE WATCHER',
+    code: 'VOID-012 // CLASS V',
+    image: '/assets/entities/entity_face.jpg',
+    resonance: '104.2 MHz',
+    threat: 'EXTREME',
+    description: 'Psycho-optical distortion mask. Directly fixates ocular sensory receptors through camera lens.',
+    distortionClass: 'entity-glitch-pulse',
+  },
+  {
+    id: 'crawler',
+    title: 'CEILING STRIDER',
+    code: 'STRIDE-904 // CLASS VI',
+    image: '/assets/entities/entity_crawler.jpg',
+    resonance: '141.8 MHz',
+    threat: 'LETHAL',
+    description: 'Inverted arachnid shadow manifestation. Phases downward from overhead metaphysical boundaries.',
+    distortionClass: 'entity-glitch-twitch',
+  },
+];
