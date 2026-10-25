@@ -78,10 +78,22 @@ export default function RealWorldAR({
     onEncounterRecordedRef.current = onEncounterRecorded;
   });
 
+  // Navigation Diagnostics state (Requirement 6)
+  const [lastNavAction, setLastNavAction] = useState('SYSTEM BOOTED');
+
+  // Modal active sync with ARManager to prevent XR background placement
+  const isAnyModalOpen = showSelector || showJournal || showRadar || showSettings;
+  useEffect(() => {
+    if (arManagerRef.current) {
+      arManagerRef.current.setModalActive(isAnyModalOpen);
+    }
+  }, [isAnyModalOpen]);
+
   // Handle entity selection change
   const handleSelectEntity = useCallback((entity) => {
     setSelectedEntity(entity);
     setShowSelector(false);
+    setLastNavAction(`SELECTED ${entity.name.toUpperCase()}`);
     if (arManagerRef.current) {
       arManagerRef.current.setSelectedEntity(entity);
     }
@@ -91,8 +103,9 @@ export default function RealWorldAR({
 
   // Handle explicit placement button or XR tap
   const handlePlaceEntity = useCallback(() => {
-    if (!arManagerRef.current || isScanning || encounterState !== EncounterState.DORMANT) return;
+    if (!arManagerRef.current || isScanning) return;
 
+    setLastNavAction(`DEPLOYED ${selectedEntity.name.toUpperCase()}`);
     soundEffects.playAnomalySpawn();
     const result = arManagerRef.current.placeEntityAtCurrentReticle(selectedEntity);
 
@@ -110,7 +123,7 @@ export default function RealWorldAR({
         setConfirmationNotice(null);
       }, 3500);
     }
-  }, [isScanning, encounterState, selectedEntity]);
+  }, [isScanning, selectedEntity]);
 
   // Handle scanning interaction through EncounterDirector
   const handleStartScan = useCallback(() => {
@@ -188,11 +201,13 @@ export default function RealWorldAR({
     const targetEntity = getEntityById(anomaly.entityId);
     if (targetEntity) {
       setSelectedEntity(targetEntity);
+      setShowRadar(false);
+      setLastNavAction(`RADAR ENGAGED ${anomaly.title.toUpperCase()}`);
       if (arManagerRef.current) {
         arManagerRef.current.setSelectedEntity(targetEntity);
       }
       if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
-      setConfirmationNotice(`${anomaly.title} LOCKED // AIM AT FLOOR & TAP TO MANIFEST`);
+      setConfirmationNotice(`${anomaly.title} LOCKED // AIM AT FLOOR & TAP DEPLOY`);
       noticeTimerRef.current = setTimeout(() => {
         setConfirmationNotice(null);
       }, 4000);
@@ -314,9 +329,12 @@ export default function RealWorldAR({
             <button
               id="ar-entity-select-btn"
               className="ar-entity-select-trigger"
-              onClick={() => setShowSelector(true)}
+              onClick={() => {
+                setLastNavAction('OPENED ENTITY CODEX');
+                setShowSelector(true);
+              }}
               title="Select Active Anomaly Entity"
-              disabled={isScanning || placedCount > 0}
+              disabled={isScanning}
             >
               <span className="ar-entity-select-icon">◈</span>
               <span className="ar-entity-select-name">{selectedEntity.name}</span>
@@ -328,6 +346,7 @@ export default function RealWorldAR({
               id="ar-journal-btn"
               className="ar-journal-trigger-btn"
               onClick={() => {
+                setLastNavAction('OPENED JOURNAL');
                 soundEffects.playButtonBeep(520, 0.05);
                 setShowJournal(true);
               }}
@@ -344,6 +363,7 @@ export default function RealWorldAR({
               id="ar-radar-btn"
               className="ar-journal-trigger-btn"
               onClick={() => {
+                setLastNavAction('OPENED RADAR');
                 soundEffects.playButtonBeep(640, 0.06);
                 setShowRadar(true);
               }}
@@ -357,6 +377,7 @@ export default function RealWorldAR({
               id="ar-settings-btn"
               className="ar-journal-trigger-btn"
               onClick={() => {
+                setLastNavAction('OPENED SETTINGS');
                 soundEffects.playButtonBeep(520, 0.05);
                 setShowSettings(true);
               }}
@@ -467,6 +488,22 @@ export default function RealWorldAR({
                   {arDiagnostics.lastError || 'NONE (HEALTHY)'}
                 </span>
               </div>
+              <div className="ar-diag-row">
+                <span className="ar-diag-label">ACTIVE MODAL:</span>
+                <span className={isAnyModalOpen ? 'diag-warn' : 'diag-ok'}>
+                  {showRadar ? 'RADAR ACTIVE' : showJournal ? 'JOURNAL ACTIVE' : showSelector ? 'CODEX ACTIVE' : showSettings ? 'SETTINGS ACTIVE' : 'NONE (HUD CLEAR)'}
+                </span>
+              </div>
+              <div className="ar-diag-row">
+                <span className="ar-diag-label">NAV INTERACTION:</span>
+                <span className={isScanning ? 'diag-warn' : 'diag-ok'}>
+                  {isScanning ? 'BUSY (SCANNING)' : 'READY (INTERACTIVE)'}
+                </span>
+              </div>
+              <div className="ar-diag-row">
+                <span className="ar-diag-label">LAST NAV ACTION:</span>
+                <span className="diag-ok">{lastNavAction}</span>
+              </div>
             </div>
           </div>
         )}
@@ -564,13 +601,13 @@ export default function RealWorldAR({
           <footer className="ar-bottom-panel">
             {/* Primary Action Button Bar */}
             <div className="ar-actions-row">
-              {placedCount === 0 || encounterState === EncounterState.DORMANT ? (
-                /* Placement Button */
+              {placedCount === 0 ? (
+                /* Primary Manifest / Placement Button */
                 <button
                   id="ar-place-button"
                   className={`ar-placement-btn ${surfaceDetected ? 'active' : 'disabled'}`}
                   onClick={handlePlaceEntity}
-                  disabled={!surfaceDetected || encounterState !== EncounterState.DORMANT}
+                  disabled={!surfaceDetected || isScanning}
                   title={surfaceDetected ? `Anchor ${selectedEntity.name} to detected surface` : 'Scan for floor/surface first'}
                 >
                   <span className="ar-btn-icon">⚡</span>
@@ -579,17 +616,31 @@ export default function RealWorldAR({
                   </span>
                 </button>
               ) : (
-                /* Post-placement options: Scan or Disperse */
-                <div className="ar-encounter-controls">
+                /* Post-placement options: Scan, Deploy another creature, or Disperse */
+                <div className="ar-encounter-controls-extended">
                   <button
                     id="ar-scan-button"
                     className="action-btn scan-pulse-btn ar-active-scan-btn"
                     onClick={handleStartScan}
                     disabled={isScanning || encounterState === EncounterState.APPEARING || encounterState === EncounterState.ESCAPING}
+                    title="Scan metaphysical frequency of manifested anomaly"
                   >
                     <span className="btn-icon">⚡</span>
                     <span className="btn-text">
-                      {isScanning ? 'ANALYZING...' : 'SCAN / PULSE ENTITY'}
+                      {isScanning ? 'ANALYZING...' : 'SCAN / PULSE'}
+                    </span>
+                  </button>
+
+                  <button
+                    id="ar-deploy-new-button"
+                    className={`action-btn ar-deploy-btn ${surfaceDetected ? 'active' : 'disabled'}`}
+                    onClick={handlePlaceEntity}
+                    disabled={!surfaceDetected || isScanning}
+                    title={surfaceDetected ? `Deploy ${selectedEntity.name} onto detected surface` : 'Aim at floor or table to deploy'}
+                  >
+                    <span className="btn-icon">◈</span>
+                    <span className="btn-text">
+                      {surfaceDetected ? `DEPLOY ${selectedEntity.name.toUpperCase()}` : 'FINDING SURFACE...'}
                     </span>
                   </button>
 
@@ -598,9 +649,10 @@ export default function RealWorldAR({
                     className="action-btn recalibrate-btn ar-purge-btn"
                     onClick={handlePurgeEntity}
                     disabled={isScanning || encounterState === EncounterState.ESCAPING}
-                    title={`Dissolve and conclude encounter with ${selectedEntity.name}`}
+                    title={`Dissolve and conclude active encounters`}
                   >
-                    DISPERSE ENTITY
+                    <span className="btn-icon">✕</span>
+                    <span className="btn-text">DISPERSE</span>
                   </button>
                 </div>
               )}

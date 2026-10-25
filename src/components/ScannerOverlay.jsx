@@ -93,15 +93,15 @@ export default function ScannerOverlay({
   return (
     <div className={`scanner-hud-container ${glitchActive ? 'glitch-flicker-active' : ''}`}>
       {/* Restrained CRT scanline & vignette */}
-      <div className="crt-scanlines" aria-hidden="true"></div>
-      <div className="crt-vignette" aria-hidden="true"></div>
+      <div className="crt-scanlines" aria-hidden="true" style={{ pointerEvents: 'none' }}></div>
+      <div className="crt-vignette" aria-hidden="true" style={{ pointerEvents: 'none' }}></div>
 
       {/* Screen Glitch Flash Overlay */}
       {glitchActive && (
-        <div className="glitch-screen-burst" aria-hidden="true">
-          <div className="glitch-color-channel-r"></div>
-          <div className="glitch-color-channel-b"></div>
-          <div className="glitch-scan-slice"></div>
+        <div className="glitch-screen-burst" aria-hidden="true" style={{ pointerEvents: 'none' }}>
+          <div className="glitch-color-channel-r" style={{ pointerEvents: 'none' }}></div>
+          <div className="glitch-color-channel-b" style={{ pointerEvents: 'none' }}></div>
+          <div className="glitch-scan-slice" style={{ pointerEvents: 'none' }}></div>
         </div>
       )}
 

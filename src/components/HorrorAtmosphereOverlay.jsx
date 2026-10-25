@@ -52,20 +52,21 @@ export default function HorrorAtmosphereOverlay({
       className={`horror-atmosphere-root ${creatureTintClass}`}
       style={{
         '--suspense-level': suspense,
+        pointerEvents: 'none',
       }}
       aria-hidden="true"
     >
       {/* Peripheral Suspense Vignette */}
-      <div className="atmosphere-vignette" />
+      <div className="atmosphere-vignette" style={{ pointerEvents: 'none' }} />
 
       {/* Edge chromatic fringe during agitated or scanning states */}
       {(encounterState === 'DISTURBED' || isScanning) && (
-        <div className="atmosphere-chromatic-fringe" />
+        <div className="atmosphere-chromatic-fringe" style={{ pointerEvents: 'none' }} />
       )}
 
       {/* Subtle CRT interference scanlines during active scanning */}
       {isScanning && (
-        <div className="atmosphere-interference-lines" />
+        <div className="atmosphere-interference-lines" style={{ pointerEvents: 'none' }} />
       )}
     </div>
   );

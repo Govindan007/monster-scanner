@@ -696,6 +696,8 @@ button:focus-visible {
 
 /* Floating Top HUD Header */
 .scanner-header-bar {
+  position: relative;
+  z-index: 30;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1003,12 +1005,13 @@ button:focus-visible {
 
 /* Bottom Control Deck */
 .scanner-bottom-deck {
+  position: relative;
+  z-index: 30;
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: 10px;
   pointer-events: auto;
-  z-index: 25;
 }
 
 .scanner-status-banner {
@@ -2717,16 +2720,49 @@ button:focus-visible {
   pointer-events: none;
 }
 
-.webxr-dom-overlay * {
+/* Enable pointer events ONLY on interactive HUD containers and modal components */
+.ar-hud-header,
+.ar-bottom-panel,
+.ar-diag-panel,
+.ar-error-card,
+.ar-scan-progress-card {
   pointer-events: auto;
 }
 
+.webxr-dom-overlay button,
+.webxr-dom-overlay [role="button"],
+.webxr-dom-overlay input,
+.webxr-dom-overlay select {
+  pointer-events: auto !important;
+  touch-action: manipulation;
+}
+
+/* Ensure non-interactive overlays in domOverlay never intercept touches */
+.webxr-dom-overlay .horror-atmosphere-root,
+.webxr-dom-overlay .horror-atmosphere-root *,
+.webxr-dom-overlay .glitch-screen-burst,
+.webxr-dom-overlay .glitch-screen-burst *,
+.webxr-dom-overlay .crt-scanlines,
+.webxr-dom-overlay .crt-vignette,
+.webxr-dom-overlay .ar-guidance-container,
+.webxr-dom-overlay .ar-status-banner,
+.webxr-dom-overlay .ar-confirmation-banner {
+  pointer-events: none !important;
+}
+
+.ar-guidance-container button {
+  pointer-events: auto !important;
+}
+
 .ar-hud-header {
+  position: relative;
+  z-index: 30;
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
   gap: 8px;
+  pointer-events: auto;
 }
 
 .ar-hud-badge {
@@ -2854,6 +2890,8 @@ button:focus-visible {
   justify-content: center;
   margin: auto 0;
   width: 100%;
+  pointer-events: none !important;
+  z-index: 10;
 }
 
 .ar-status-banner {
@@ -2941,11 +2979,52 @@ button:focus-visible {
 }
 
 .ar-bottom-panel {
+  position: relative;
+  z-index: 30;
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  pointer-events: auto;
 }
+
+.ar-encounter-controls-extended {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+.ar-deploy-btn {
+  height: 48px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.ar-deploy-btn.active {
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.28) 0%, rgba(0, 160, 220, 0.18) 100%);
+  border: 1px solid var(--cyan-primary);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.3);
+}
+
+.ar-deploy-btn.disabled {
+  background: rgba(12, 18, 28, 0.88);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+
 
 .ar-actions-row {
   width: 100%;
@@ -3030,11 +3109,16 @@ button:focus-visible {
 }
 
 /* Atmospheric Overlays */
+.horror-atmosphere-root,
+.horror-atmosphere-root * {
+  pointer-events: none !important;
+}
+
 .horror-atmosphere-root {
   position: absolute;
   inset: 0;
-  pointer-events: none;
-  z-index: 12;
+  pointer-events: none !important;
+  z-index: 5;
 }
 
 .atmosphere-vignette {

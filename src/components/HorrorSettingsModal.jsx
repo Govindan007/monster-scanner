@@ -70,7 +70,7 @@ export default function HorrorSettingsModal({ isOpen, onClose }) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="settings-modal-card">
+      <div className="settings-modal-card" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <header className="settings-modal-header">
           <div className="settings-title-box">

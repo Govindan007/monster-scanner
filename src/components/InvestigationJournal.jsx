@@ -67,7 +67,7 @@ export default function InvestigationJournal({ isOpen, onClose }) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="journal-modal-sheet">
+      <div className="journal-modal-sheet" onClick={(e) => e.stopPropagation()}>
         {/* Header Bar */}
         <header className="journal-modal-header">
           <div className="journal-header-title">

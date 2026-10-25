@@ -424,13 +424,11 @@ export class ARManager {
           this._tempMatrix.fromArray(pose.transform.matrix);
           this.reticle.updateFromMatrix(this._tempMatrix);
 
-          // If entity is already placed in world space, keep reticle hidden to avoid visual clutter
-          if (this.placedEntities.length > 0) {
-            if (this.reticle.isVisible()) {
-              this.reticle.setVisible(false);
-            }
-          } else if (!this.reticle.isVisible()) {
+          if (!this.reticle.isVisible()) {
             this.reticle.setVisible(true);
+          }
+          if (!this.diagnostics.surfaceDetected) {
+            this.diagnostics.surfaceDetected = true;
             if (this.onSurfaceStateChange) this.onSurfaceStateChange(true);
           }
 
@@ -477,9 +475,17 @@ export class ARManager {
   }
 
   /**
+   * Sets whether a UI modal is currently active to prevent background XR tap placement
+   */
+  setModalActive(active) {
+    this._modalActive = Boolean(active);
+  }
+
+  /**
    * Handles user tapping the screen in XR space
    */
   handleXRSelect() {
+    if (this._modalActive) return;
     this.placeEntityAtCurrentReticle();
   }
 
@@ -500,7 +506,7 @@ export class ARManager {
    * Explicitly places an entity at the reticle's current world-space pose
    */
   placeEntityAtCurrentReticle(overrideDef = null) {
-    if (!this.reticle || !this.reticle.isVisible() || !this.latestHitPose.valid || !this.scene) {
+    if (!this.latestHitPose.valid || !this.scene) {
       console.warn('ARManager: Surface not detected yet. Reticle is not locked onto a plane.');
       return { success: false, reason: 'NO_SURFACE_DETECTED' };
     }

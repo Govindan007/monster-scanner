@@ -38,7 +38,7 @@ export default function EntitySelector({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="entity-selector-sheet">
+      <div className="entity-selector-sheet" onClick={(e) => e.stopPropagation()}>
         {/* Modal Handle & Header */}
         <div className="sheet-drag-handle" aria-hidden="true"></div>
 

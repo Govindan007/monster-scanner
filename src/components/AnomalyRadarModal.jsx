@@ -342,7 +342,7 @@ export default function AnomalyRadarModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="radar-modal-sheet">
+      <div className="radar-modal-sheet" onClick={(e) => e.stopPropagation()}>
         {/* Header Bar */}
         <header className="radar-modal-header">
           <div className="radar-header-title">
