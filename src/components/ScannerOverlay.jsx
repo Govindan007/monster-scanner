@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { soundEffects } from '../services/soundEffects';
-import HumanoidEntity from './HumanoidEntity';
+import CreatureSilhouette from './CreatureSilhouette';
 import EntitySelector from './EntitySelector';
 import HorrorAtmosphereOverlay from './HorrorAtmosphereOverlay';
 import { getEntityById, getDefaultEntity } from '../ar/entities/EntityRegistry';
@@ -83,19 +83,18 @@ export default function ScannerOverlay({
     onRecalibrate();
   };
 
-  // Determine integrity status color
-  const integrityColorClass =
-    realityIntegrity > 60
-      ? 'integrity-high'
-      : realityIntegrity > 30
-      ? 'integrity-mid'
-      : 'integrity-critical';
+  const handleSelectEntity = (entity) => {
+    if (onSelectEntityId) {
+      onSelectEntityId(entity.id);
+    }
+    setShowSelector(false);
+  };
 
   return (
     <div className={`scanner-hud-container ${glitchActive ? 'glitch-flicker-active' : ''}`}>
-      {/* CRT Scanline & Phosphor Vignette Overlays */}
-      <div className="crt-scanlines"></div>
-      <div className="crt-vignette"></div>
+      {/* Restrained CRT scanline & vignette */}
+      <div className="crt-scanlines" aria-hidden="true"></div>
+      <div className="crt-vignette" aria-hidden="true"></div>
 
       {/* Screen Glitch Flash Overlay */}
       {glitchActive && (
@@ -106,107 +105,113 @@ export default function ScannerOverlay({
         </div>
       )}
 
-      {/* Phase 7: Horror Atmosphere & Suspense Overlay */}
+      {/* Horror Atmosphere & Suspense Overlay */}
       <HorrorAtmosphereOverlay
         encounterState={activeAnomaly ? 'DISTURBED' : 'DORMANT'}
         isScanning={glitchActive || scanStatus.includes('DETECTED')}
         activeEntityId={selectedEntityId}
       />
 
-      {/* TOP HEADER BAR */}
-      <header className="scanner-header">
-        <div className="header-left">
-          <div className="active-badge">
-            <span className="pulsing-record-dot"></span>
-            <span className="brand-text">VEIL // ACTIVE</span>
+      {/* FLOATING TOP HUD HEADER */}
+      <header className="scanner-header-bar">
+        <div className="hud-badge-group">
+          <div className="hud-live-tag">
+            <span className="live-pulse-dot"></span>
+            <span className="live-brand">VEIL // ACTIVE</span>
           </div>
-          <div className="device-telemetry">
-            <span className="dim-label">SYNC:</span> 1.04λ | <span className="dim-label">TIME:</span> {timecode}
-          </div>
+          <span className="hud-sync-mono">1.04λ // {timecode}</span>
         </div>
 
-        <div className="header-right">
-          {/* Entity Selector trigger */}
+        <div className="hud-header-actions">
+          {/* Active Entity Selector Chip */}
           <button
-            className="hud-entity-select-btn"
+            type="button"
+            className="hud-entity-chip-btn"
             onClick={() => setShowSelector(true)}
-            title="Configure Target Entity / Codex"
+            title="Configure Active Entity Frequency"
           >
-            <span className="hud-entity-icon">◈</span>
-            <span className="hud-entity-name">{currentEntity.name}</span>
-            <span className="hud-entity-arrow">▾</span>
+            <span className="entity-chip-glyph">◈</span>
+            <span className="entity-chip-name">{currentEntity.name}</span>
+            <span className="entity-chip-arrow">▾</span>
           </button>
 
-          {/* Investigation Journal */}
+          {/* Investigation Journal Button */}
           {onOpenJournal && (
             <button
-              className="hud-icon-button hud-journal-btn"
+              type="button"
+              className="hud-quick-btn"
               onClick={onOpenJournal}
-              title="Open Paranormal Investigation Journal & Dossiers"
+              title="Open Investigation Journal & Dossiers"
             >
               <span>📁</span>
               {unreviewedEvidenceCount > 0 && (
-                <span className="hud-badge-counter">{unreviewedEvidenceCount}</span>
+                <span className="hud-badge-pill">{unreviewedEvidenceCount}</span>
               )}
             </button>
           )}
 
-          {/* Anomaly Radar Matrix */}
+          {/* Anomaly Radar Button */}
           {onOpenRadar && (
             <button
-              className="hud-icon-button hud-radar-btn"
+              type="button"
+              className="hud-quick-btn"
               onClick={onOpenRadar}
-              title="Open Optical Anomaly Radar Matrix"
+              title="Open Anomaly Radar Matrix"
             >
               <span>📡</span>
             </button>
           )}
 
-          {/* Diagnostics toggle */}
-          <button
-            className={`hud-icon-button ${showDiagnostics ? 'active-diag' : ''}`}
-            onClick={() => setShowDiagnostics(!showDiagnostics)}
-            title="System & Camera Diagnostics"
-          >
-            DIAG
-          </button>
-
-          {/* Feed toggle */}
-          <button
-            className="hud-icon-button"
-            onClick={() => onToggleSimulated(!isSimulated)}
-            title="Toggle Live Camera / Simulated Feed"
-          >
-            {isSimulated ? 'CAM' : 'SIM'}
-          </button>
-
-          {/* Immersion & Audio Settings toggle */}
+          {/* Settings Button */}
           {onOpenSettings && (
             <button
-              className="hud-icon-button"
+              type="button"
+              className="hud-quick-btn"
               onClick={onOpenSettings}
-              title="Immersion, Audio & Horror Settings"
+              title="Audio & Immersion Settings"
             >
-              ⚙
+              <span>⚙</span>
             </button>
           )}
 
-          {/* Sound toggle */}
+          {/* Diagnostics toggle */}
           <button
-            className={`hud-icon-button ${isMuted ? 'muted' : ''}`}
-            onClick={toggleSound}
-            title={isMuted ? 'Unmute Audio' : 'Mute Audio'}
+            type="button"
+            className={`hud-quick-btn ${showDiagnostics ? 'active-diag' : ''}`}
+            onClick={() => setShowDiagnostics(!showDiagnostics)}
+            title="Toggle Diagnostics HUD"
           >
-            {isMuted ? '🔇' : '🔊'}
+            <span>⚡</span>
           </button>
 
-          {/* Return / Power Off */}
+          {/* Camera / Sim Toggle */}
           <button
-            className="hud-icon-button danger"
+            type="button"
+            className="hud-quick-btn"
+            onClick={() => onToggleSimulated(!isSimulated)}
+            title="Toggle Live Camera / Chamber Simulator"
+          >
+            <span>{isSimulated ? 'CAM' : 'SIM'}</span>
+          </button>
+
+          {/* Mute Toggle */}
+          <button
+            type="button"
+            className="hud-quick-btn"
+            onClick={toggleSound}
+            title={isMuted ? 'Unmute' : 'Mute'}
+          >
+            <span>{isMuted ? '🔇' : '🔊'}</span>
+          </button>
+
+          {/* Exit Button */}
+          <button
+            type="button"
+            className="hud-quick-btn danger"
             onClick={onExit}
             title="Exit Scanner"
           >
-            ✕
+            <span>✕</span>
           </button>
         </div>
       </header>
@@ -227,7 +232,7 @@ export default function ScannerOverlay({
           <div className="outer-radar-sweep"></div>
         </div>
 
-        {/* Lateral Sensor Readouts */}
+        {/* Lateral Telemetry Left */}
         <div className="reticle-telemetry left">
           <div className="spec-label">RF SPECTRAL</div>
           <div className="spec-value">{fluctuatingFreq} MHz</div>
@@ -239,14 +244,15 @@ export default function ScannerOverlay({
           </div>
         </div>
 
+        {/* Lateral Telemetry Right */}
         <div className="reticle-telemetry right">
-          <div className="spec-label">GRID COORD</div>
+          <div className="spec-label">GRID MATRIX</div>
           <div className="spec-value">X: 41.9 / Y: -87.6</div>
-          <div className="sensor-state">LENS: SENSITIZED</div>
+          <div className="sensor-state">LENS: ACTIVE</div>
         </div>
       </div>
 
-      {/* ACTIVE ANOMALY VISUAL & TRACKING OVERLAY */}
+      {/* ACTIVE ANOMALY 2D VISUAL & TARGETING OVERLAY */}
       {activeAnomaly && (
         <div
           className="anomaly-entity-wrapper"
@@ -255,121 +261,115 @@ export default function ScannerOverlay({
             left: `${activeAnomaly.position.x}%`,
           }}
         >
-          {/* Atmospheric Inline SVG Humanoid Entity */}
-          <div className="humanoid-wrapper-glow">
-            <HumanoidEntity />
+          {/* Faithful Creature Vector Silhouette */}
+          <div className="creature-2d-viewport">
+            <CreatureSilhouette
+              entityId={selectedEntityId}
+              size="normal"
+              animate={true}
+            />
           </div>
 
-          {/* Tactical Bounding Box locking onto the entity */}
+          {/* Tactical Bounding Box locking onto entity */}
           <div className="anomaly-target-hud">
             <div className="target-box-corners"></div>
             <div className="target-alert-tag">⚠ ANOMALY DETECTED</div>
-            <div className="target-title">UNKNOWN ENTITY</div>
+            <div className="target-title">{currentEntity.name}</div>
             <div className="target-meta">
-              <span>STATUS: ANOMALY DETECTED</span>
+              <span className="meta-threat">{currentEntity.threat} THREAT</span>
               <span>DIST: {activeAnomaly.distance}m</span>
             </div>
           </div>
         </div>
       )}
 
-      {/* GLITCH RED WARNING ON MANIFESTATION */}
-      {glitchActive && (
-        <div className="glitch-emergency-alert">
-          <div className="glitch-emergency-banner">
-            <span className="flicker-text">⚠ ANOMALY DETECTED // UNKNOWN ENTITY ⚠</span>
-          </div>
-        </div>
-      )}
-
-      {/* BOTTOM SCANNER TELEMETRY PANEL */}
-      <footer className="scanner-bottom-panel">
-        {/* Status bar */}
-        <div className="status-readout-row">
-          <div className="status-label">SCAN STATUS:</div>
-          <div className={`status-value ${activeAnomaly ? 'status-detected' : ''}`}>
+      {/* BOTTOM CONTROL DECK */}
+      <footer className="scanner-bottom-deck">
+        {/* Status Bar */}
+        <div className="scanner-status-banner">
+          <span className="status-label">STATUS:</span>
+          <span className={`status-text ${activeAnomaly ? 'detected' : ''}`}>
             {scanStatus}
-          </div>
+          </span>
         </div>
 
-        {/* Tactical Metrics Grid */}
-        <div className="telemetry-grid">
-          {/* Reality Integrity Meter */}
-          <div className="metric-box">
-            <div className="metric-header">
-              <span className="metric-title">REALITY INTEGRITY</span>
-              <span className={`metric-percentage ${integrityColorClass}`}>
-                {realityIntegrity}%
-              </span>
-            </div>
-            <div className="integrity-bar-track">
+        {/* Telemetry Metrics Pods */}
+        <div className="telemetry-compact-row">
+          <div className="metric-pod">
+            <span className="pod-label">REALITY INTEGRITY</span>
+            <div className="pod-meter-shell">
               <div
-                className={`integrity-bar-fill ${integrityColorClass}`}
-                style={{ width: `${Math.max(0, realityIntegrity)}%` }}
+                className="pod-meter-fill"
+                style={{
+                  width: `${realityIntegrity}%`,
+                  backgroundColor:
+                    realityIntegrity > 60
+                      ? '#00e5ff'
+                      : realityIntegrity > 30
+                      ? '#f59e0b'
+                      : '#ef4444',
+                }}
               ></div>
             </div>
+            <span className="pod-val">{realityIntegrity}%</span>
           </div>
 
-          {/* Anomalies Detected Counter */}
-          <div className="metric-box anomaly-counter-box">
-            <div className="metric-title">ANOMALIES</div>
-            <div className="metric-count-large">{anomalyCount}</div>
+          <div className="metric-pod">
+            <span className="pod-label">ANOMALIES RESOLVED</span>
+            <span className="pod-val cyan">{anomalyCount}</span>
           </div>
-        </div>
-
-        {/* Low Reality Warning Banner */}
-        {realityIntegrity <= 40 && (
-          <div className="critical-warning-strip">
-            <span className="blink-fast">CRITICAL: METAPHYSICAL RIFT TEARING. RECALIBRATE.</span>
-          </div>
-        )}
-
-        {/* Action Controls */}
-        <div className="scanner-actions-row">
-          <button
-            id="scan-button"
-            className="action-btn scan-pulse-btn"
-            onClick={handleManualScan}
-            disabled={Boolean(activeAnomaly)}
-          >
-            <span className="btn-icon">⚡</span>
-            <span className="btn-text">
-              {activeAnomaly ? 'ANALYZING SIGNAL...' : 'SCAN / PULSE SENSOR'}
-            </span>
-          </button>
 
           {realityIntegrity < 100 && (
             <button
-              className="action-btn recalibrate-btn"
+              type="button"
+              className="action-recalibrate-btn"
               onClick={handleRecalibrateClick}
               title="Stabilize reality integrity back to 100%"
             >
-              PURGE / RECALIBRATE
+              RECALIBRATE
             </button>
           )}
         </div>
 
-        {/* Prominent ENTER REAL AR Button */}
-        <button
-          id="enter-ar-button"
-          className="action-btn enter-ar-btn"
-          onClick={onEnterRealAR}
-          disabled={isEnteringAR}
-          title="Launch Real-World Tracked WebXR AR (Hit-Test on physical surfaces)"
-        >
-          <span className="btn-icon">🌐</span>
-          <span className="btn-text">
-            {isEnteringAR ? 'CONNECTING TO AR...' : 'ENTER REAL AR'}
-          </span>
-          <span className={`ar-badge-tag ${arSupported ? 'ready' : 'info'}`}>
-            {isEnteringAR ? 'STARTING' : arSupported ? 'WEBXR READY' : 'WEBXR'}
-          </span>
-        </button>
+        {/* Primary Action Buttons Bar */}
+        <div className="scanner-actions-grid">
+          {/* Primary Pulse Button */}
+          <button
+            type="button"
+            id="pulse-scan-btn"
+            className="scanner-primary-action-btn pulse-action"
+            onClick={handleManualScan}
+            title="Send high-frequency resonance pulse to locate anomalies"
+          >
+            <span className="btn-icon">⚡</span>
+            <span className="btn-title">PULSE SCANNER</span>
+          </button>
+
+          {/* Prominent ENTER REAL AR Button */}
+          <button
+            type="button"
+            id="enter-ar-button"
+            className="scanner-primary-action-btn enter-ar-action"
+            onClick={onEnterRealAR}
+            disabled={isEnteringAR}
+            title="Launch Real-World Tracked WebXR AR (Hit-Test on physical surfaces)"
+          >
+            <span className="btn-icon">🌐</span>
+            <div className="btn-stack">
+              <span className="btn-title">
+                {isEnteringAR ? 'CONNECTING...' : 'ENTER REAL AR'}
+              </span>
+              <span className={`btn-pill-sub ${arSupported ? 'ready' : 'info'}`}>
+                {isEnteringAR ? 'STARTING' : arSupported ? 'WEBXR READY' : 'WEBXR'}
+              </span>
+            </div>
+          </button>
+        </div>
       </footer>
 
-      {/* AR Unsupported Explanation Modal */}
+      {/* WebXR Unsupported Notice Modal */}
       {arUnsupportedNotice && (
-        <div className="ar-modal-overlay">
+        <div className="ar-modal-overlay" role="dialog" aria-modal="true">
           <div className="ar-modal-card">
             <div className="ar-modal-badge">⚠ HARDWARE / BROWSER NOTICE</div>
             <h3 className="ar-modal-title">WebXR Immersive-AR Unavailable</h3>
@@ -378,30 +378,28 @@ export default function ScannerOverlay({
               <strong>WebXR Device API (immersive-ar)</strong> with surface hit-testing.
             </p>
             <div className="ar-modal-reason">
-              <span className="reason-label">DEVICE STATUS:</span> {arUnsupportedNotice}
+              <code>{arUnsupportedNotice}</code>
             </div>
-            <p className="ar-modal-clarification">
-              VEIL uses real plane tracking for AR. Screen overlays are not falsely labeled as real AR.
-              You can continue using the optical camera scanner.
+            <p className="ar-modal-guidance">
+              On Android, open this page in <strong>Google Chrome</strong> and ensure{' '}
+              <strong>Google Play Services for AR</strong> is updated.
             </p>
             <button
-              className="cyber-button-sm primary"
+              type="button"
+              className="cyber-button primary"
               onClick={() => setArUnsupportedNotice(null)}
             >
-              CONTINUE OPTICAL SCANNER
+              CONTINUE WITH CAMERA SCANNER
             </button>
           </div>
         </div>
       )}
 
-      {/* Manual Entity Selector Modal */}
+      {/* Entity Selector Modal */}
       <EntitySelector
         isOpen={showSelector}
         selectedEntityId={selectedEntityId}
-        onSelectEntity={(entity) => {
-          if (onSelectEntityId) onSelectEntityId(entity.id);
-          setShowSelector(false);
-        }}
+        onSelectEntity={handleSelectEntity}
         onClose={() => setShowSelector(false)}
       />
     </div>

@@ -188,6 +188,9 @@ export default function RealWorldAR({
     const targetEntity = getEntityById(anomaly.entityId);
     if (targetEntity) {
       setSelectedEntity(targetEntity);
+      if (arManagerRef.current) {
+        arManagerRef.current.setSelectedEntity(targetEntity);
+      }
       if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
       setConfirmationNotice(`${anomaly.title} LOCKED // AIM AT FLOOR & TAP TO MANIFEST`);
       noticeTimerRef.current = setTimeout(() => {

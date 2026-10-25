@@ -12,6 +12,7 @@ import {
   DEFAULT_SIMULATED_ORIGIN,
 } from '../services/locationRadarService';
 import { soundEffects } from '../services/soundEffects';
+import CreatureSilhouette from './CreatureSilhouette';
 
 export default function AnomalyRadarModal({
   isOpen,
@@ -35,7 +36,6 @@ export default function AnomalyRadarModal({
   // Load and apply settings
   const handleToggleLocation = async () => {
     if (settings.locationEnabled) {
-      // User is disabling location
       stopLocationWatch();
       const updated = saveRadarSettings({ locationEnabled: false });
       setSettings(updated);
@@ -44,7 +44,6 @@ export default function AnomalyRadarModal({
       setGpsErrorMsg(null);
       soundEffects.playButtonBeep(380, 0.08);
     } else {
-      // User is explicitly opting in to enable location
       if (!isGeolocationAvailable()) {
         setGpsStatus('UNSUPPORTED');
         setGpsErrorMsg('Browser geolocation not supported on this device.');
@@ -63,7 +62,6 @@ export default function AnomalyRadarModal({
         setSettings(updated);
         setGpsStatus('ACTIVE');
 
-        // Start ongoing watch
         startLocationWatch(
           (pos) => {
             setUserLocation(pos);
@@ -78,8 +76,8 @@ export default function AnomalyRadarModal({
         setGpsStatus('DENIED');
         setGpsErrorMsg(
           err.code === 1
-            ? 'Location access denied. Tap "Simulate Coordinates" to test radar.'
-            : 'Unable to acquire satellite fix. Using simulated local baseline.'
+            ? 'Location access denied. Use indoor simulator to test radar.'
+            : 'Unable to acquire satellite fix. Using virtual local baseline.'
         );
         soundEffects.playButtonBeep(260, 0.15);
       }
@@ -114,7 +112,6 @@ export default function AnomalyRadarModal({
     if (soundBeepTimerRef.current) clearInterval(soundBeepTimerRef.current);
 
     if (selectedAnomaly) {
-      // Interval speeds up as player approaches (from 1600ms at distance to 280ms point-blank)
       const interval = Math.max(280, 1600 - (selectedAnomaly.signalPct || 0) * 13);
       soundBeepTimerRef.current = setInterval(() => {
         if (settings.radarAudioEnabled && selectedAnomaly.signalPct > 5) {
@@ -149,35 +146,35 @@ export default function AnomalyRadarModal({
       const height = canvas.height;
       const centerX = width / 2;
       const centerY = height / 2;
-      const radius = Math.min(centerX, centerY) - 14;
+      const radius = Math.min(centerX, centerY) - 12;
 
       // Clear with dark HUD background
       ctx.clearRect(0, 0, width, height);
 
-      // Radial dark gradient background
+      // Radial dark background
       const bgGrad = ctx.createRadialGradient(centerX, centerY, 5, centerX, centerY, radius);
-      bgGrad.addColorStop(0, 'rgba(0, 24, 38, 0.95)');
-      bgGrad.addColorStop(1, 'rgba(2, 8, 14, 0.98)');
+      bgGrad.addColorStop(0, 'rgba(6, 16, 26, 0.96)');
+      bgGrad.addColorStop(1, 'rgba(4, 8, 14, 0.98)');
       ctx.fillStyle = bgGrad;
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
       ctx.fill();
 
-      // Range rings (25m, 50m, 100m, 150m)
+      // Range rings (35m, 70m, 105m, 140m)
       const rings = [0.25, 0.5, 0.75, 1.0];
       const ringMeters = ['35m', '70m', '105m', '140m'];
 
       rings.forEach((rScale, idx) => {
         ctx.beginPath();
         ctx.arc(centerX, centerY, radius * rScale, 0, Math.PI * 2);
-        ctx.strokeStyle = idx === 0 ? 'rgba(0, 255, 136, 0.35)' : 'rgba(0, 240, 255, 0.18)';
+        ctx.strokeStyle = idx === 0 ? 'rgba(0, 229, 255, 0.35)' : 'rgba(0, 229, 255, 0.15)';
         ctx.lineWidth = 1;
         ctx.setLineDash(idx === 0 ? [3, 3] : []);
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Ring distance labels
-        ctx.fillStyle = idx === 0 ? 'rgba(0, 255, 136, 0.65)' : 'rgba(0, 240, 255, 0.45)';
+        // Ring labels
+        ctx.fillStyle = idx === 0 ? 'rgba(0, 229, 255, 0.65)' : 'rgba(148, 163, 184, 0.45)';
         ctx.font = '8px monospace';
         ctx.fillText(ringMeters[idx], centerX + 4, centerY - radius * rScale + 9);
       });
@@ -188,12 +185,12 @@ export default function AnomalyRadarModal({
       ctx.lineTo(centerX, centerY + radius);
       ctx.moveTo(centerX - radius, centerY);
       ctx.lineTo(centerX + radius, centerY);
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.15)';
+      ctx.strokeStyle = 'rgba(0, 229, 255, 0.12)';
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Cardinal direction letters
-      ctx.fillStyle = '#00f0ff';
+      // Cardinal direction indicators
+      ctx.fillStyle = '#00e5ff';
       ctx.font = 'bold 9px monospace';
       ctx.textAlign = 'center';
       ctx.fillText('N', centerX, centerY - radius + 11);
@@ -205,7 +202,7 @@ export default function AnomalyRadarModal({
       sweepAngleRef.current = (sweepAngleRef.current + 0.035) % (Math.PI * 2);
       const angle = sweepAngleRef.current;
 
-      // Play sweep ping at top of circle (North)
+      // Play sweep ping at North
       const now = Date.now();
       if (angle < 0.05 && now - lastSweepPingRef.current > 1800) {
         lastSweepPingRef.current = now;
@@ -221,8 +218,8 @@ export default function AnomalyRadarModal({
       ctx.arc(centerX, centerY, radius, angle - 0.45, angle);
       ctx.closePath();
       const sweepGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
-      sweepGrad.addColorStop(0, 'rgba(0, 240, 255, 0.35)');
-      sweepGrad.addColorStop(1, 'rgba(0, 240, 255, 0.0)');
+      sweepGrad.addColorStop(0, 'rgba(0, 229, 255, 0.32)');
+      sweepGrad.addColorStop(1, 'rgba(0, 229, 255, 0.0)');
       ctx.fillStyle = sweepGrad;
       ctx.fill();
 
@@ -230,15 +227,14 @@ export default function AnomalyRadarModal({
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
       ctx.lineTo(centerX + Math.cos(angle) * radius, centerY + Math.sin(angle) * radius);
-      ctx.strokeStyle = 'rgba(0, 255, 230, 0.85)';
+      ctx.strokeStyle = 'rgba(0, 229, 255, 0.85)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
       ctx.restore();
 
       // Plot Anomaly Blips
-      const maxRadarDistance = 160; // Max display range in meters
+      const maxRadarDistance = 160;
       anomalies.forEach((ano) => {
-        // Bearing to Cartesian on radar (0 deg = North = -Y)
         const rad = ((ano.bearing - 90) * Math.PI) / 180;
         const normDist = Math.min(ano.distanceMeters, maxRadarDistance) / maxRadarDistance;
         const blipDist = normDist * radius;
@@ -248,17 +244,17 @@ export default function AnomalyRadarModal({
         const isSelected = ano.id === selectedAnomalyId;
         const inRange = ano.inRange;
 
-        // Blip color by entity threat / category
-        let blipColor = '#00f0ff';
+        // Blip color by entity theme
+        let blipColor = '#00e5ff';
         if (ano.entityId === 'the-drifter') blipColor = '#c084fc';
         if (ano.entityId === 'the-crawler') blipColor = '#f59e0b';
-        if (inRange) blipColor = '#00ff88';
+        if (inRange) blipColor = '#10b981';
 
-        // Outer pulse circle if in encounter range
+        // Outer pulse ring if in encounter range
         if (inRange) {
           ctx.beginPath();
           ctx.arc(blipX, blipY, 10 + Math.sin(now / 150) * 3, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(0, 255, 136, 0.6)';
+          ctx.strokeStyle = 'rgba(16, 185, 129, 0.7)';
           ctx.lineWidth = 1.5;
           ctx.stroke();
         }
@@ -267,7 +263,7 @@ export default function AnomalyRadarModal({
         if (isSelected) {
           ctx.beginPath();
           ctx.arc(blipX, blipY, 8, 0, Math.PI * 2);
-          ctx.strokeStyle = '#fff';
+          ctx.strokeStyle = '#f1f5f9';
           ctx.lineWidth = 1.5;
           ctx.stroke();
         }
@@ -277,22 +273,22 @@ export default function AnomalyRadarModal({
         ctx.arc(blipX, blipY, isSelected ? 4.5 : 3.5, 0, Math.PI * 2);
         ctx.fillStyle = blipColor;
         ctx.fill();
-        ctx.strokeStyle = '#000';
+        ctx.strokeStyle = '#000000';
         ctx.lineWidth = 1;
         ctx.stroke();
 
         // Designation tag
-        ctx.fillStyle = isSelected ? '#fff' : 'rgba(255, 255, 255, 0.7)';
+        ctx.fillStyle = isSelected ? '#ffffff' : 'rgba(241, 245, 249, 0.75)';
         ctx.font = '7.5px monospace';
         ctx.fillText(ano.designation, blipX, blipY + 12);
       });
 
-      // Player Center Marker (Green triangle or dot)
+      // Player Center Dot
       ctx.beginPath();
       ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
-      ctx.fillStyle = '#00ff88';
+      ctx.fillStyle = '#10b981';
       ctx.fill();
-      ctx.strokeStyle = '#000';
+      ctx.strokeStyle = '#000000';
       ctx.lineWidth = 1;
       ctx.stroke();
 
@@ -338,51 +334,50 @@ export default function AnomalyRadarModal({
 
   return (
     <div
-      className="radar-modal-overlay"
+      className="radar-modal-backdrop"
       role="dialog"
       aria-modal="true"
-      aria-label="Paranormal Anomaly Radar"
+      aria-label="Optical Anomaly Radar Matrix"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="radar-modal-card">
+      <div className="radar-modal-sheet">
         {/* Header Bar */}
         <header className="radar-modal-header">
-          <div className="radar-title-box">
-            <span className="radar-pulse-icon">📡</span>
-            <div>
-              <div className="radar-title-main">ANOMALY RADAR MATRIX</div>
-              <div className="radar-title-sub">
-                1420.4 MHz // LOCAL VIRTUAL RIFT MAPPING
-              </div>
-            </div>
+          <div className="radar-header-title">
+            <span className="radar-header-badge">1420.4 MHz // {gpsStatus} // RIFT MAPPING</span>
+            <h2 className="radar-title-text">ANOMALY RADAR MATRIX</h2>
           </div>
 
-          <div className="radar-header-controls">
+          <div className="radar-toggles-cluster">
             <button
-              className={`radar-setting-chip ${settings.locationEnabled ? 'active' : ''}`}
+              type="button"
+              className={`radar-chip-toggle ${settings.locationEnabled ? 'active' : ''}`}
               onClick={handleToggleLocation}
-              title="Toggle Real GPS vs Simulated Local Coordinates"
+              title="Toggle Live GPS vs Virtual Grid"
             >
               {settings.locationEnabled ? '📍 GPS: ON' : '📍 GPS: OFF'}
             </button>
             <button
-              className={`radar-setting-chip ${settings.hapticsEnabled ? 'active' : ''}`}
+              type="button"
+              className={`radar-chip-toggle ${settings.hapticsEnabled ? 'active' : ''}`}
               onClick={handleToggleHaptics}
-              title="Toggle Proximity Haptic Feedback"
+              title="Toggle Haptic Proximity Vibration"
             >
-              {settings.hapticsEnabled ? '📳 HAPTICS: ON' : '📳 HAPTICS: OFF'}
+              {settings.hapticsEnabled ? '📳 HAPTICS' : '📳 OFF'}
             </button>
             <button
-              className={`radar-setting-chip ${settings.radarAudioEnabled ? 'active' : ''}`}
+              type="button"
+              className={`radar-chip-toggle ${settings.radarAudioEnabled ? 'active' : ''}`}
               onClick={handleToggleAudio}
-              title="Toggle Radar Sweep & Proximity Beeps"
+              title="Toggle Radar Sweep Audio"
             >
-              {settings.radarAudioEnabled ? '🔊 SFX: ON' : '🔇 SFX: OFF'}
+              {settings.radarAudioEnabled ? '🔊 SFX' : '🔇 OFF'}
             </button>
             <button
-              className="radar-close-btn"
+              type="button"
+              className="radar-close-icon-btn"
               onClick={onClose}
               title="Close Radar"
             >
@@ -391,125 +386,134 @@ export default function AnomalyRadarModal({
           </div>
         </header>
 
-        {/* GPS Status Notice / Error */}
+        {/* GPS Warning Banner if any */}
         {gpsErrorMsg && (
-          <div className="radar-notice-banner warning">
+          <div className="radar-error-callout" role="alert">
             <span>⚠ {gpsErrorMsg}</span>
           </div>
         )}
 
-        <div className="radar-content-body">
+        <div className="radar-body-scrollable">
           {/* Main Visual Radar Display Area */}
-          <div className="radar-display-column">
-            <div className="radar-canvas-container">
+          <div className="radar-scope-wrapper">
+            <div className="radar-canvas-housing">
               <canvas
                 ref={canvasRef}
-                width={280}
-                height={280}
+                width={260}
+                height={260}
                 className="radar-canvas"
               />
-              <div className="radar-grid-telemetry">
-                <span className="radar-telemetry-tag">
-                  ORIGIN: {userLocation.lat.toFixed(4)}, {userLocation.lon.toFixed(4)}
-                </span>
-                <span className="radar-telemetry-tag">
-                  {settings.locationEnabled ? `GPS [${gpsStatus}]: ±${Math.round(userLocation.accuracy)}m` : 'VIRTUAL LOCAL GRID'}
-                </span>
+              <div className="radar-scope-telemetry">
+                <span>ORIGIN: {userLocation.lat.toFixed(4)}, {userLocation.lon.toFixed(4)}</span>
+                <span>{settings.locationEnabled ? `GPS: ±${Math.round(userLocation.accuracy)}m` : 'VIRTUAL GRID'}</span>
               </div>
             </div>
 
-            {/* Anomaly Quick Selector Chips */}
-            <div className="radar-blip-selector">
+            {/* Anomaly Quick Target Chips */}
+            <div className="radar-targets-row" role="tablist">
               {anomalies.map((ano) => (
                 <button
                   key={ano.id}
-                  className={`radar-anomaly-chip ${selectedAnomalyId === ano.id ? 'active' : ''} ${ano.inRange ? 'in-range' : ''}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedAnomalyId === ano.id}
+                  className={`radar-target-pill ${selectedAnomalyId === ano.id ? 'active' : ''} ${ano.inRange ? 'in-range' : ''}`}
                   onClick={() => {
                     setSelectedAnomalyId(ano.id);
                     soundEffects.playButtonBeep(480, 0.04);
                   }}
                 >
-                  <span className="ano-chip-code">{ano.designation}</span>
-                  <span className="ano-chip-dist">{ano.distanceMeters}m</span>
-                  {ano.inRange && <span className="ano-range-dot">●</span>}
+                  <span className="target-pill-code">{ano.designation}</span>
+                  <span className="target-pill-dist">{ano.distanceMeters}m</span>
+                  {ano.inRange && <span className="target-pill-dot">●</span>}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Selected Anomaly Tactical Dossier & Proximity Engagement */}
-          <div className="radar-details-column">
-            <div className="radar-target-header">
-              <div className="radar-target-title-block">
-                <span className="radar-target-designation">{selectedAnomaly.designation}</span>
-                <h3 className="radar-target-name">{selectedAnomaly.title}</h3>
-                <div className="radar-target-badges">
-                  <span className="radar-badge-threat">{selectedAnomaly.threat} THREAT</span>
-                  <span className="radar-badge-res">{selectedAnomaly.resonance}</span>
+          {/* Selected Anomaly Tactical Dossier Panel */}
+          <section className="radar-target-dossier" aria-label="Target Telemetry">
+            <div className="target-card-top">
+              <div className="target-thumbnail-box">
+                <CreatureSilhouette
+                  entityId={selectedAnomaly.entityId}
+                  size="small"
+                  animate={true}
+                />
+              </div>
+
+              <div className="target-specs-box">
+                <div className="target-code-header">
+                  <span className="target-code-tag">{selectedAnomaly.designation}</span>
+                  <span className={`target-threat-pill threat-${selectedAnomaly.threat?.toLowerCase()}`}>
+                    {selectedAnomaly.threat}
+                  </span>
                 </div>
+                <h3 className="target-entity-title">{selectedAnomaly.title}</h3>
+                <span className="target-freq-tag">{selectedAnomaly.resonance}</span>
               </div>
             </div>
 
-            {/* Signal Strength & Telemetry Meter */}
-            <div className="radar-signal-telemetry-card">
-              <div className="signal-meter-header">
-                <span className="signal-label">SIGNAL RESONANCE:</span>
-                <span className="signal-val-txt">{selectedAnomaly.signalPct}% ({selectedAnomaly.dbm} dBm)</span>
+            {/* Signal Resonance Meter */}
+            <div className="target-signal-meter-card">
+              <div className="meter-header-row">
+                <span className="meter-label">SIGNAL RESONANCE</span>
+                <span className="meter-val-mono">
+                  {selectedAnomaly.signalPct}% ({selectedAnomaly.dbm} dBm)
+                </span>
               </div>
 
-              <div className="signal-progress-bar-shell">
+              <div className="meter-bar-track">
                 <div
-                  className="signal-progress-bar-fill"
+                  className="meter-bar-fill"
                   style={{
                     width: `${selectedAnomaly.signalPct}%`,
-                    backgroundColor: selectedAnomaly.inRange ? '#00ff88' : '#00f0ff',
+                    backgroundColor: selectedAnomaly.inRange ? '#10b981' : '#00e5ff',
                   }}
                 ></div>
               </div>
 
-              <div className="target-proximity-specs">
-                <div className="spec-metric">
-                  <span className="metric-label">DISTANCE:</span>
-                  <span className={`metric-val ${selectedAnomaly.inRange ? 'highlight-green' : ''}`}>
+              <div className="meter-metrics-grid">
+                <div className="metric-cell">
+                  <span className="cell-k">DISTANCE:</span>
+                  <span className={`cell-v ${selectedAnomaly.inRange ? 'highlight-green' : ''}`}>
                     {selectedAnomaly.distanceMeters}m
                   </span>
                 </div>
-                <div className="spec-metric">
-                  <span className="metric-label">BEARING:</span>
-                  <span className="metric-val">{selectedAnomaly.bearing}°</span>
+                <div className="metric-cell">
+                  <span className="cell-k">BEARING:</span>
+                  <span className="cell-v">{selectedAnomaly.bearing}°</span>
                 </div>
-                <div className="spec-metric">
-                  <span className="metric-label">THRESHOLD:</span>
-                  <span className="metric-val">&lt; {selectedAnomaly.encounterRadius}m</span>
+                <div className="metric-cell">
+                  <span className="cell-k">THRESHOLD:</span>
+                  <span className="cell-v">&lt; {selectedAnomaly.encounterRadius}m</span>
                 </div>
               </div>
             </div>
 
-            {/* Description Lore */}
-            <p className="radar-target-desc">{selectedAnomaly.description}</p>
+            {/* Target Description */}
+            <p className="target-lore-text">{selectedAnomaly.description}</p>
 
-            {/* Engagement Status & Action Button */}
-            <div className="radar-action-area">
+            {/* Action Engagement Button & Status */}
+            <div className="radar-engage-action-block">
               {selectedAnomaly.isCoolingDown ? (
-                <div className="radar-status-box cooling-down">
-                  <span className="status-icon">⏳</span>
-                  <span>ANOMALOUS FLUX DEPLETED // COOLING DOWN ({selectedAnomaly.cooldownRemainingSec}s)</span>
+                <div className="engage-status-pill cooldown">
+                  <span>⏳ RIFT DISPERSED // COOLING DOWN ({selectedAnomaly.cooldownRemainingSec}s)</span>
                 </div>
               ) : selectedAnomaly.inRange ? (
-                <div className="radar-status-box ready">
-                  <span className="status-icon">⚡</span>
-                  <span>IN MANIFESTATION RANGE // RIFT COHERENT</span>
+                <div className="engage-status-pill ready">
+                  <span>⚡ MANIFESTATION THRESHOLD REACHED</span>
                 </div>
               ) : (
-                <div className="radar-status-box out-of-range">
-                  <span className="status-icon">📡</span>
-                  <span>OUT OF RANGE // APPROACH WITHIN {selectedAnomaly.encounterRadius}m</span>
+                <div className="engage-status-pill out-of-range">
+                  <span>📡 APPROACH WITHIN {selectedAnomaly.encounterRadius}m TO ENGAGE</span>
                 </div>
               )}
 
               <button
+                type="button"
                 id="radar-engage-btn"
-                className={`radar-engage-action-btn ${selectedAnomaly.canEngage ? 'engage-ready' : 'disabled'}`}
+                className={`radar-primary-engage-btn ${selectedAnomaly.canEngage ? 'can-engage' : 'disabled'}`}
                 disabled={!selectedAnomaly.canEngage}
                 onClick={handleEngage}
               >
@@ -521,59 +525,52 @@ export default function AnomalyRadarModal({
               </button>
             </div>
 
-            {/* Proximity Walk Simulator for Testing on Laptop / Indoors */}
-            <div className="radar-simulator-panel">
-              <div className="sim-panel-header">
-                <span>🕹 PROXIMITY SIMULATOR (INDOOR &amp; LAPTOP TESTING)</span>
-                <span className="sim-offset-val">+{simulationOffset}m</span>
+            {/* Indoor & Desktop Simulation Module */}
+            <div className="radar-indoor-simulator">
+              <div className="sim-header">
+                <span>🕹 PROXIMITY SIMULATOR (TESTING INDOORS)</span>
+                <span className="sim-offset-badge">+{simulationOffset}m</span>
               </div>
-              <p className="sim-hint">
-                Simulate walking toward anomalies without leaving your desk or when testing indoors.
+              <p className="sim-help-text">
+                Simulate walking toward target coordinates without leaving your desk:
               </p>
-              <div className="sim-button-row">
+              <div className="sim-controls-row">
                 <button
                   type="button"
-                  className="sim-step-btn"
+                  className="sim-chip-btn"
                   onClick={() => handleApproachBy(15)}
-                  title="Simulate walking 15 meters closer"
                 >
                   👟 APPROACH +15m
                 </button>
                 <button
                   type="button"
-                  className="sim-step-btn"
+                  className="sim-chip-btn"
                   onClick={() => handleApproachBy(-15)}
                   disabled={simulationOffset <= 0}
-                  title="Simulate stepping back 15 meters"
                 >
                   BACK -15m
                 </button>
                 <button
                   type="button"
-                  className="sim-step-btn reset"
+                  className="sim-chip-btn reset"
                   onClick={handleResetSimulation}
                   disabled={simulationOffset === 0}
-                  title="Reset simulation offset to physical GPS coordinates"
                 >
                   RESET
                 </button>
               </div>
             </div>
-          </div>
+          </section>
         </div>
 
-        {/* Safety & Privacy Legal Footer Banner (Requirement 5) */}
-        <footer className="radar-safety-footer">
-          <div className="safety-warning-line">
-            <span className="warning-icon">⚠</span>
-            <span>
-              <strong>SAFETY DIRECTIVE:</strong> Remain aware of physical surroundings. Stop moving before entering AR. Never step into roadways or trespass onto private property.
-            </span>
+        {/* Legal & Safety Footer Banner */}
+        <footer className="radar-modal-footer">
+          <div className="safety-statement">
+            <span className="statement-icon">⚠</span>
+            <span><strong>SAFETY DIRECTIVE:</strong> Remain aware of physical surroundings. Stop walking before entering AR.</span>
           </div>
-          <div className="privacy-guarantee-line">
-            <span>
-              <strong>PRIVACY &amp; FICTION:</strong> Anomalies are fictional digital assets. Coordinates remain entirely on your local device and are never transmitted to external servers.
-            </span>
+          <div className="privacy-statement">
+            <span><strong>FICTION &amp; PRIVACY:</strong> Virtual entities are fictional game constructs. Coordinates remain on device.</span>
           </div>
         </footer>
       </div>
